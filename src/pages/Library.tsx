@@ -3,7 +3,8 @@ import JSZip from 'jszip'
 import TopNav from '@/components/TopNav'
 import { useGalleryStore } from '@/store/useGalleryStore'
 import { cn } from '@/lib/utils'
-import { buildCoverFilename } from '@/utils/filename'
+import { buildCoverFilename, buildCoverFilenameByTags } from '@/utils/filename'
+import { generateNaming } from '@/utils/api'
 import { Download, Trash2, X } from 'lucide-react'
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -70,6 +71,14 @@ export default function Library() {
                 const zip = new JSZip()
                 const ts = new Date()
                 const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(ts.getHours()).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}`
+                const namingRes = await generateNaming({
+                  items: selectedItems.map((it) => ({
+                    id: it.id,
+                    prompt: it.prompt,
+                    imageUrl: it.editedUrl || it.proxyUrl || it.imageUrl,
+                  })),
+                }).catch(() => ({ items: [] as { id: string; industry: string; style: string; color: string }[] }))
+                const namingMap = new Map(namingRes.items.map((i) => [i.id, i]))
 
                 await Promise.all(
                   selectedItems.map(async (it, idx) => {
@@ -78,7 +87,10 @@ export default function Library() {
                     const res = await fetch(url)
                     const blob = await res.blob()
                     const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'bin'
-                    const filename = buildCoverFilename(it.prompt, idx + 1, ext)
+                    const tags = namingMap.get(it.id)
+                    const filename = tags
+                      ? buildCoverFilenameByTags(tags, idx + 1, ext)
+                      : buildCoverFilename(it.prompt, idx + 1, ext)
                     zip.file(filename, blob)
                   }),
                 )

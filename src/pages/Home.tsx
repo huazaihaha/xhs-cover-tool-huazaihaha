@@ -5,8 +5,8 @@ import PromptListEditor from '@/components/PromptListEditor'
 import ModelSelector from '@/components/ModelSelector'
 import ResultsGrid from '@/components/ResultsGrid'
 import { cn } from '@/lib/utils'
-import { generateImages } from '@/utils/api'
-import { buildCoverFilename } from '@/utils/filename'
+import { generateImages, generateNaming } from '@/utils/api'
+import { buildCoverFilename, buildCoverFilenameByTags } from '@/utils/filename'
 import type { GenerateResultItem, ModelName } from '../../shared/types'
 import { useGalleryStore } from '@/store/useGalleryStore'
 import { Download, Loader2, Sparkles, Upload, X } from 'lucide-react'
@@ -268,6 +268,14 @@ export default function Home() {
                     const zip = new JSZip()
                     const ts = new Date()
                     const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(ts.getHours()).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}`
+                    const namingRes = await generateNaming({
+                      items: selectedSucceeded.map((it) => ({
+                        id: it.id,
+                        prompt: it.prompt,
+                        imageUrl: it.proxyUrl || it.imageUrl,
+                      })),
+                    }).catch(() => ({ items: [] as { id: string; industry: string; style: string; color: string }[] }))
+                    const namingMap = new Map(namingRes.items.map((i) => [i.id, i]))
 
                     await Promise.all(
                       selectedSucceeded.map(async (it, idx) => {
@@ -276,7 +284,10 @@ export default function Home() {
                         const res = await fetch(url)
                         const blob = await res.blob()
                         const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'bin'
-                        const filename = buildCoverFilename(it.prompt, idx + 1, ext)
+                        const tags = namingMap.get(it.id)
+                        const filename = tags
+                          ? buildCoverFilenameByTags(tags, idx + 1, ext)
+                          : buildCoverFilename(it.prompt, idx + 1, ext)
                         zip.file(filename, blob)
                       }),
                     )

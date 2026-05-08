@@ -33,5 +33,16 @@ export function extractIndustryAndStyle(prompt: string) {
 
 export function buildCoverFilename(prompt: string, seq: number, ext: string) {
   const { industry, style } = extractIndustryAndStyle(prompt)
-  return `${industry}-${style}-${String(seq).padStart(2, '0')}.${ext}`
+  return `${industry}-${style}-多色-${String(seq).padStart(2, '0')}.${ext}`
+}
+
+export function buildCoverFilenameByTags(
+  tags: { industry?: string; style?: string; color?: string },
+  seq: number,
+  ext: string,
+) {
+  const industry = cleanSegment(tags.industry || '', '通用')
+  const style = cleanSegment(tags.style || '', '默认风格')
+  const color = cleanSegment(tags.color || '', '多色')
+  return `${industry}-${style}-${color}-${String(seq).padStart(2, '0')}.${ext}`
 }

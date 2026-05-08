@@ -1,4 +1,9 @@
-import type { GenerateRequest, GenerateResponse } from '../../shared/types'
+import type {
+  GenerateRequest,
+  GenerateResponse,
+  NamingRequest,
+  NamingResponse,
+} from '../../shared/types'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
 
@@ -21,4 +26,14 @@ export async function generateImages(body: GenerateRequest) {
 export async function checkHealth() {
   const res = await fetch(withApiBase('/api/health'))
   return res.ok
+}
+
+export async function generateNaming(body: NamingRequest) {
+  const res = await fetch(withApiBase('/api/naming'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const json = (await res.json()) as NamingResponse
+  return json
 }

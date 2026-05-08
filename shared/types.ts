@@ -23,3 +23,24 @@ export type GenerateResultItem = {
 export type GenerateResponse = {
   items: GenerateResultItem[]
 }
+
+export type NamingRequestItem = {
+  id: string
+  prompt: string
+  imageUrl?: string
+}
+
+export type NamingRequest = {
+  items: NamingRequestItem[]
+}
+
+export type NamingResultItem = {
+  id: string
+  industry: string
+  style: string
+  color: string
+}
+
+export type NamingResponse = {
+  items: NamingResultItem[]
+}
