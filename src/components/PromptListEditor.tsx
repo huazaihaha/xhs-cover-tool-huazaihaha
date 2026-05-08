@@ -5,11 +5,9 @@ import { CopyPlus, Plus, Trash2 } from 'lucide-react'
 type Props = {
   prompts: string[]
   onChange: (prompts: string[]) => void
-  max?: number
 }
 
-export default function PromptListEditor({ prompts, onChange, max = 10 }: Props) {
-  const canAdd = prompts.length < max
+export default function PromptListEditor({ prompts, onChange }: Props) {
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({})
 
   const resize = (idx: number) => {
@@ -29,17 +27,12 @@ export default function PromptListEditor({ prompts, onChange, max = 10 }: Props)
       <div className="mb-3 flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold text-zinc-50">提示词</div>
-          <div className="text-xs text-zinc-400">最多 {max} 条，点击右侧按钮快速复制上一条再微调</div>
+          <div className="text-xs text-zinc-400">支持无限条，点击右侧按钮快速复制上一条再微调</div>
         </div>
         <button
           type="button"
-          onClick={() => (canAdd ? onChange([...prompts, '']) : null)}
-          className={cn(
-            'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition',
-            canAdd
-              ? 'bg-emerald-400/15 text-emerald-200 hover:bg-emerald-400/25'
-              : 'cursor-not-allowed bg-white/5 text-zinc-500',
-          )}
+          onClick={() => onChange([...prompts, ''])}
+          className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-400/25"
         >
           <Plus className="h-4 w-4" />
           新增
@@ -111,9 +104,7 @@ export default function PromptListEditor({ prompts, onChange, max = 10 }: Props)
       </div>
 
       <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
-        <div>
-          已输入 {prompts.filter((p) => p.trim()).length} / {max}
-        </div>
+        <div>已输入 {prompts.filter((p) => p.trim()).length} 条</div>
         <button
           type="button"
           onClick={() => onChange([''])}

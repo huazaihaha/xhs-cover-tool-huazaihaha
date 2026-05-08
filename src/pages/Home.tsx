@@ -120,12 +120,11 @@ export default function Home() {
       <div className="mx-auto grid max-w-6xl gap-6 px-6 py-6 lg:grid-cols-[420px_1fr]">
         <div className="space-y-4">
           <PromptTemplateBuilder
-            remainingSlots={Math.max(0, 10 - prompts.length)}
             onGenerate={(generatedPrompts) => {
-              setPrompts((prev) => [...prev, ...generatedPrompts].slice(0, 10))
+              setPrompts((prev) => [...prev, ...generatedPrompts])
             }}
           />
-          <PromptListEditor prompts={prompts} onChange={setPrompts} max={10} />
+          <PromptListEditor prompts={prompts} onChange={setPrompts} />
           <ModelSelector value={model} onChange={setModel} />
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -222,7 +221,6 @@ export default function Home() {
                   const normalized = prompts
                     .map((p) => p.trim())
                     .filter(Boolean)
-                    .slice(0, 10)
                   if (!normalized.length) return
 
                   const runId = `run_${Date.now()}`
@@ -277,7 +275,7 @@ export default function Home() {
                 )}
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                批量生成（最多10）
+                批量生成
               </button>
               <button
                 type="button"

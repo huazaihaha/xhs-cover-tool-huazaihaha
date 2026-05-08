@@ -5,7 +5,7 @@ import { useGalleryStore } from '@/store/useGalleryStore'
 import { cn } from '@/lib/utils'
 import { buildCoverFilename, buildCoverFilenameByTags } from '@/utils/filename'
 import { generateNaming } from '@/utils/api'
-import { Download, Trash2, X } from 'lucide-react'
+import { Check, Download, Trash2, X } from 'lucide-react'
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -159,12 +159,20 @@ export default function Library() {
                   type="button"
                   onClick={() => setSelected((s) => ({ ...s, [it.id]: !s[it.id] }))}
                   className={cn(
-                    'group overflow-hidden rounded-2xl border bg-zinc-950/30 text-left transition',
+                    'group relative overflow-hidden rounded-2xl border bg-zinc-950/30 text-left transition',
                     checked
-                      ? 'border-emerald-300/35'
+                      ? 'border-emerald-300 bg-emerald-300/10 shadow-[0_0_0_2px_rgba(110,231,183,0.45),0_0_24px_rgba(16,185,129,0.4)]'
                       : 'border-white/10 hover:border-white/20',
                   )}
                 >
+                  {checked ? (
+                    <>
+                      <div className="pointer-events-none absolute inset-0 z-[1] bg-emerald-300/10" />
+                      <div className="absolute left-2 top-2 z-10 inline-flex h-7 w-7 items-center justify-center rounded-lg border border-emerald-200 bg-emerald-300 text-zinc-950 shadow-[0_0_0_2px_rgba(16,185,129,0.45)]">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    </>
+                  ) : null}
                   <div className="aspect-[3/4] w-full bg-black">
                     {src ? (
                       <img src={src} alt={it.prompt} className="h-full w-full object-cover transition group-hover:scale-[1.02]" />

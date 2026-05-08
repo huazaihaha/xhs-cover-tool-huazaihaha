@@ -14,7 +14,6 @@ type PersistedState = {
 }
 
 type Props = {
-  remainingSlots: number
   onGenerate: (prompts: string[]) => void
 }
 
@@ -62,7 +61,7 @@ function buildAlignedRows(keys: string[], valuesMap: Record<string, string[]>) {
   return rows
 }
 
-export default function PromptTemplateBuilder({ remainingSlots, onGenerate }: Props) {
+export default function PromptTemplateBuilder({ onGenerate }: Props) {
   const [template, setTemplate] = useState('')
   const [params, setParams] = useState<TemplateParam[]>([])
   const [message, setMessage] = useState('')
@@ -195,17 +194,13 @@ export default function PromptTemplateBuilder({ remainingSlots, onGenerate }: Pr
       </div>
 
       <div className="mt-3 flex items-center justify-between gap-3">
-        <div className="text-xs text-zinc-500">剩余可新增提示词：{remainingSlots}</div>
+        <div className="text-xs text-zinc-500">按参数行对齐生成，不做数量限制</div>
         <button
           type="button"
           onClick={() => {
             const tpl = template.trim()
             if (!tpl) {
               setMessage('请先填写模版')
-              return
-            }
-            if (remainingSlots <= 0) {
-              setMessage('已达到 10 条上限，请先删除部分提示词')
               return
             }
 
@@ -229,27 +224,18 @@ export default function PromptTemplateBuilder({ remainingSlots, onGenerate }: Pr
               .map((c) => renderTemplate(tpl, c).trim())
               .filter(Boolean)
             const unique = Array.from(new Set(generated))
-            const limited = unique.slice(0, remainingSlots)
 
-            if (!limited.length) {
+            if (!unique.length) {
               setMessage('未生成有效提示词，请检查参数值')
               return
             }
-            onGenerate(limited)
-
-            if (limited.length < unique.length) {
-              setMessage(`已生成 ${limited.length} 条，超出上限的 ${unique.length - limited.length} 条已忽略`)
-            } else {
-              setMessage(`已生成 ${limited.length} 条提示词`)
-            }
+            onGenerate(unique)
+            setMessage(`已生成 ${unique.length} 条提示词`)
           }}
           className={cn(
             'inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition',
-            remainingSlots > 0
-              ? 'bg-emerald-300 text-zinc-950 hover:bg-emerald-200'
-              : 'cursor-not-allowed bg-white/10 text-zinc-500',
+            'bg-emerald-300 text-zinc-950 hover:bg-emerald-200',
           )}
-          disabled={remainingSlots <= 0}
         >
           <Sparkles className="h-4 w-4" />
           自动生成提示词

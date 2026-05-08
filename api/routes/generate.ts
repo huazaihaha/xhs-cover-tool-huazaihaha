@@ -29,7 +29,7 @@ router.post(
       res.status(400).json({ items: [] })
       return
     }
-    if (prompts.length < 1 || prompts.length > 10) {
+    if (prompts.length < 1) {
       res.status(400).json({ items: [] })
       return
     }
@@ -37,7 +37,6 @@ router.post(
     const normalizedPrompts = prompts
       .map((p) => (typeof p === 'string' ? p.trim() : ''))
       .filter(Boolean)
-      .slice(0, 10)
 
     if (normalizedPrompts.length < 1) {
       res.status(400).json({ items: [] })
