@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: xhs-cover-api
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci
+    startCommand: npm run server:start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PLATO_BASE_URL
+        sync: false
+      - key: PLATO_API_KEY
+        sync: false
+      - key: PLATO_AUTH_MODE
+        value: x-api-key
+      - key: PLATO_MODEL_IMAGE2
+        value: gpt-image-2-all
+      - key: PLATO_GENERATIONS_PATH
+        value: /v1/images/generations
+      - key: PLATO_TASKS_PATH_PREFIX
+        value: /v1/images/tasks
+      - key: PLATO_ASYNC
+        value: "false"
+
