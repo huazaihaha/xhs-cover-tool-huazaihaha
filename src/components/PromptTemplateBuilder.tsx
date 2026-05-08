@@ -43,19 +43,23 @@ function renderTemplate(template: string, mapping: Record<string, string>) {
   })
 }
 
-function buildCombinations(keys: string[], valuesMap: Record<string, string[]>) {
-  let combinations: Record<string, string>[] = [{}]
-  for (const key of keys) {
-    const values = valuesMap[key]?.length ? valuesMap[key] : ['']
-    const next: Record<string, string>[] = []
-    for (const existing of combinations) {
-      for (const value of values) {
-        next.push({ ...existing, [key]: value })
-      }
+function buildAlignedRows(keys: string[], valuesMap: Record<string, string[]>) {
+  if (!keys.length) return [{}]
+
+  const lengths = keys.map((k) => valuesMap[k]?.length || 0)
+  const expected = lengths[0] || 0
+  if (!expected) return []
+  if (!lengths.every((len) => len === expected)) return null
+
+  const rows: Record<string, string>[] = []
+  for (let i = 0; i < expected; i += 1) {
+    const row: Record<string, string> = {}
+    for (const key of keys) {
+      row[key] = valuesMap[key][i] || ''
     }
-    combinations = next
+    rows.push(row)
   }
-  return combinations
+  return rows
 }
 
 export default function PromptTemplateBuilder({ remainingSlots, onGenerate }: Props) {
@@ -216,8 +220,12 @@ export default function PromptTemplateBuilder({ remainingSlots, onGenerate }: Pr
                 .filter(Boolean)
             }
 
-            const combos = names.length ? buildCombinations(names, valuesMap) : [{}]
-            const generated = combos
+            const alignedRows = names.length ? buildAlignedRows(names, valuesMap) : [{}]
+            if (alignedRows === null) {
+              setMessage('参数值行数不一致：请确保每个参数都填写相同行数（例如都为 10 行）')
+              return
+            }
+            const generated = alignedRows
               .map((c) => renderTemplate(tpl, c).trim())
               .filter(Boolean)
             const unique = Array.from(new Set(generated))
