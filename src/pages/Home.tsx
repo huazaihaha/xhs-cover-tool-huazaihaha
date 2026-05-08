@@ -14,10 +14,17 @@ import { useNavigate } from 'react-router-dom'
 type Item = GenerateResultItem & { proxyUrl?: string }
 type ReferenceImage = { id: string; name: string; dataUrl: string }
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+
+function withApiBase(path: string) {
+  if (!API_BASE_URL) return path
+  return `${API_BASE_URL}${path}`
+}
+
 function toProxyUrl(imageUrl?: string) {
   if (!imageUrl) return undefined
-  if (imageUrl.startsWith('/api/')) return imageUrl
-  return `/api/image?url=${encodeURIComponent(imageUrl)}`
+  if (imageUrl.startsWith('/api/')) return withApiBase(imageUrl)
+  return withApiBase(`/api/image?url=${encodeURIComponent(imageUrl)}`)
 }
 
 function downloadBlob(blob: Blob, filename: string) {
