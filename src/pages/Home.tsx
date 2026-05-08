@@ -303,6 +303,48 @@ export default function Home() {
             selected={selected}
             onToggle={(id) => setSelected((s) => ({ ...s, [id]: !s[id] }))}
             onOpen={(id) => navigate(`/editor/${id}`)}
+            onRetry={async (id) => {
+              const target = items.find((it) => it.id === id)
+              if (!target || target.status !== 'failed') return
+
+              const runningItem: Item = {
+                ...target,
+                status: 'running',
+                errorMessage: undefined,
+              }
+              appendWorkspaceItems([runningItem])
+              upsertItems([runningItem])
+              setWorkspaceBusy(true)
+
+              try {
+                const res = await generateImages({
+                  prompts: [target.prompt],
+                  model: target.model,
+                  referenceImages: referenceImages.map((img) => img.dataUrl),
+                })
+                const out = res.items[0]
+                if (!out) throw new Error('Empty response')
+                const nextItem: Item = {
+                  ...target,
+                  status: out.status,
+                  imageUrl: out.imageUrl,
+                  errorMessage: out.errorMessage,
+                  proxyUrl: toProxyUrl(out.imageUrl),
+                }
+                appendWorkspaceItems([nextItem])
+                upsertItems([nextItem])
+              } catch {
+                const failedItem: Item = {
+                  ...target,
+                  status: 'failed',
+                  errorMessage: 'Generation failed',
+                }
+                appendWorkspaceItems([failedItem])
+                upsertItems([failedItem])
+              } finally {
+                setWorkspaceBusy(false)
+              }
+            }}
             onCopyPrompt={async (prompt) => {
               try {
                 await navigator.clipboard.writeText(prompt)

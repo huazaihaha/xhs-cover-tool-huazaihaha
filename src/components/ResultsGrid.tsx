@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import type { GenerateResultItem } from '../../shared/types'
-import { Check, Copy, ExternalLink, ImageOff, Loader2 } from 'lucide-react'
+import { Check, Copy, ExternalLink, ImageOff, Loader2, RotateCcw } from 'lucide-react'
 
 type Item = GenerateResultItem & {
   proxyUrl?: string
@@ -12,6 +12,7 @@ type Props = {
   onToggle: (id: string) => void
   onOpen: (id: string) => void
   onCopyPrompt: (prompt: string) => void
+  onRetry: (id: string) => void
 }
 
 function StatusBadge({ status }: { status: Item['status'] }) {
@@ -45,6 +46,7 @@ export default function ResultsGrid({
   onToggle,
   onOpen,
   onCopyPrompt,
+  onRetry,
 }: Props) {
   if (!items.length) {
     return (
@@ -112,14 +114,25 @@ export default function ResultsGrid({
                   >
                     <Copy className="h-4 w-4" />
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => onOpen(it.id)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
-                    aria-label="编辑"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </button>
+                  {it.status === 'failed' ? (
+                    <button
+                      type="button"
+                      onClick={() => onRetry(it.id)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-amber-300 transition hover:bg-amber-400/10 hover:text-amber-200"
+                      aria-label="重新生成"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onOpen(it.id)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
+                      aria-label="编辑"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -129,4 +142,3 @@ export default function ResultsGrid({
     </div>
   )
 }
-
