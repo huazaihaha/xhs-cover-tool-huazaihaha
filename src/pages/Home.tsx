@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import TopNav from '@/components/TopNav'
 import PromptListEditor from '@/components/PromptListEditor'
@@ -9,7 +9,7 @@ import { generateImages, generateNaming } from '@/utils/api'
 import { buildCoverFilename, buildCoverFilenameByTags } from '@/utils/filename'
 import type { GenerateResultItem, ModelName } from '../../shared/types'
 import { useGalleryStore } from '@/store/useGalleryStore'
-import { Download, Loader2, Sparkles, Upload, X } from 'lucide-react'
+import { Download, Loader2, Sparkles, Square, Upload, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 type Item = GenerateResultItem & { proxyUrl?: string }
@@ -51,6 +51,7 @@ export default function Home() {
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const activeRunRef = useRef<{ runId: string; controller: AbortController } | null>(null)
 
   const succeeded = useMemo(
     () => items.filter((i) => i.status === 'succeeded' && (i.proxyUrl || i.imageUrl)),
@@ -64,8 +65,16 @@ export default function Home() {
     () => items.filter((i) => i.status === 'failed'),
     [items],
   )
+  const runningItems = useMemo(
+    () => items.filter((i) => i.status === 'running'),
+    [items],
+  )
 
   const canGenerate = prompts.some((p) => p.trim()) && !busy
+
+  useEffect(() => {
+    if (busy && runningItems.length === 0) setWorkspaceBusy(false)
+  }, [busy, runningItems.length, setWorkspaceBusy])
 
   const retryOne = async (target: Item) => {
     const runningItem: Item = {
@@ -210,6 +219,8 @@ export default function Home() {
                   if (!normalized.length) return
 
                   const runId = `run_${Date.now()}`
+                  const controller = new AbortController()
+                  activeRunRef.current = { runId, controller }
                   setWorkspaceBusy(true)
                   setSelected({})
 
@@ -227,7 +238,7 @@ export default function Home() {
                       prompts: normalized,
                       model,
                       referenceImages: referenceImages.map((img) => img.dataUrl),
-                    })
+                    }, controller.signal)
                     const next: Item[] = res.items.map((it) => ({
                       ...it,
                       proxyUrl: toProxyUrl(it.imageUrl),
@@ -235,17 +246,19 @@ export default function Home() {
                     replaceWorkspaceRun(runId, next)
                     upsertItems(next)
                   } catch {
+                    const stopped = controller.signal.aborted
                     const failed: Item[] = normalized.map((prompt, idx) => ({
-                      id: `${runId}_failed_${idx}`,
+                      id: `${runId}_${idx}`,
                       prompt,
                       model,
                       status: 'failed',
-                      errorMessage: 'Generation failed',
+                      errorMessage: stopped ? 'Stopped' : 'Generation failed',
                       createdAt: new Date().toISOString(),
                     }))
                     replaceWorkspaceRun(runId, failed)
                     upsertItems(failed)
                   } finally {
+                    if (activeRunRef.current?.runId === runId) activeRunRef.current = null
                     setWorkspaceBusy(false)
                   }
                 }}
@@ -258,6 +271,43 @@ export default function Home() {
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 批量生成（最多10）
+              </button>
+              <button
+                type="button"
+                disabled={!busy}
+                onClick={() => {
+                  const active = activeRunRef.current
+                  if (active) active.controller.abort()
+                  const stopTargetIds = active
+                    ? new Set(
+                        items
+                          .filter((it) => it.status === 'running' && it.id.startsWith(`${active.runId}_`))
+                          .map((it) => it.id),
+                      )
+                    : new Set(items.filter((it) => it.status === 'running').map((it) => it.id))
+                  const stoppedItems = items
+                    .filter((it) => stopTargetIds.has(it.id))
+                    .map((it) => ({
+                      ...it,
+                      status: 'failed' as const,
+                      errorMessage: 'Stopped',
+                    }))
+                  if (stoppedItems.length) {
+                    appendWorkspaceItems(stoppedItems)
+                    upsertItems(stoppedItems)
+                  }
+                  activeRunRef.current = null
+                  setWorkspaceBusy(false)
+                }}
+                className={cn(
+                  'inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition',
+                  busy
+                    ? 'bg-rose-500/15 text-rose-200 hover:bg-rose-500/25'
+                    : 'cursor-not-allowed bg-white/5 text-zinc-600',
+                )}
+              >
+                <Square className="h-4 w-4" />
+                停止生成
               </button>
 
               <div className="flex items-center gap-2">

@@ -12,11 +12,12 @@ function withApiBase(path: string) {
   return `${API_BASE_URL}${path}`
 }
 
-export async function generateImages(body: GenerateRequest) {
+export async function generateImages(body: GenerateRequest, signal?: AbortSignal) {
   const res = await fetch(withApiBase('/api/generate'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   })
 
   const json = (await res.json()) as GenerateResponse
