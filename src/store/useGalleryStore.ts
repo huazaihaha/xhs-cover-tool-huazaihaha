@@ -38,19 +38,38 @@ export const useGalleryStore = create<GalleryState>()(
         }),
       appendWorkspaceItems: (incoming) =>
         set((state) => {
-          const map = new Map(state.workspaceItems.map((i) => [i.id, i]))
-          for (const item of incoming) map.set(item.id, item)
+          const existingIds = new Set(state.workspaceItems.map((i) => i.id))
+          const next = [...state.workspaceItems]
+
+          for (const item of incoming) {
+            const idx = next.findIndex((i) => i.id === item.id)
+            if (idx >= 0) {
+              next[idx] = item
+            }
+          }
+
+          const newItems = incoming.filter((item) => !existingIds.has(item.id))
           return {
-            workspaceItems: Array.from(map.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+            workspaceItems: [...newItems, ...next],
           }
         }),
       replaceWorkspaceRun: (runId, incoming) =>
         set((state) => {
-          const remained = state.workspaceItems.filter((i) => !i.id.startsWith(`${runId}_`))
-          const map = new Map(remained.map((i) => [i.id, i]))
-          for (const item of incoming) map.set(item.id, item)
+          const runPrefix = `${runId}_`
+          const runIndices: number[] = []
+          for (let i = 0; i < state.workspaceItems.length; i += 1) {
+            if (state.workspaceItems[i].id.startsWith(runPrefix)) runIndices.push(i)
+          }
+
+          const insertAt = runIndices.length ? Math.min(...runIndices) : 0
+          const incomingIds = new Set(incoming.map((i) => i.id))
+          const remained = state.workspaceItems.filter(
+            (i) => !i.id.startsWith(runPrefix) && !incomingIds.has(i.id),
+          )
+          const next = [...remained]
+          next.splice(insertAt, 0, ...incoming)
           return {
-            workspaceItems: Array.from(map.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+            workspaceItems: next,
           }
         }),
       setWorkspaceBusy: (workspaceBusy) => set({ workspaceBusy }),

@@ -60,8 +60,49 @@ export default function Home() {
     () => succeeded.filter((i) => selected[i.id]),
     [succeeded, selected],
   )
+  const failedItems = useMemo(
+    () => items.filter((i) => i.status === 'failed'),
+    [items],
+  )
 
   const canGenerate = prompts.some((p) => p.trim()) && !busy
+
+  const retryOne = async (target: Item) => {
+    const runningItem: Item = {
+      ...target,
+      status: 'running',
+      errorMessage: undefined,
+    }
+    appendWorkspaceItems([runningItem])
+    upsertItems([runningItem])
+
+    try {
+      const res = await generateImages({
+        prompts: [target.prompt],
+        model: target.model,
+        referenceImages: referenceImages.map((img) => img.dataUrl),
+      })
+      const out = res.items[0]
+      if (!out) throw new Error('Empty response')
+      const nextItem: Item = {
+        ...target,
+        status: out.status,
+        imageUrl: out.imageUrl,
+        errorMessage: out.errorMessage,
+        proxyUrl: toProxyUrl(out.imageUrl),
+      }
+      appendWorkspaceItems([nextItem])
+      upsertItems([nextItem])
+    } catch {
+      const failedItem: Item = {
+        ...target,
+        status: 'failed',
+        errorMessage: 'Generation failed',
+      }
+      appendWorkspaceItems([failedItem])
+      upsertItems([failedItem])
+    }
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -296,6 +337,27 @@ export default function Home() {
             >
               全选完成项
             </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (busy || !failedItems.length) return
+                setWorkspaceBusy(true)
+                try {
+                  await Promise.all(failedItems.map((it) => retryOne(it)))
+                } finally {
+                  setWorkspaceBusy(false)
+                }
+              }}
+              className={cn(
+                'rounded-full px-3 py-1.5 text-xs transition',
+                failedItems.length && !busy
+                  ? 'bg-amber-400/15 text-amber-200 hover:bg-amber-400/25'
+                  : 'cursor-not-allowed bg-white/5 text-zinc-600',
+              )}
+              disabled={!failedItems.length || busy}
+            >
+              一键重试失败项（{failedItems.length}）
+            </button>
           </div>
 
           <ResultsGrid
@@ -304,43 +366,12 @@ export default function Home() {
             onToggle={(id) => setSelected((s) => ({ ...s, [id]: !s[id] }))}
             onOpen={(id) => navigate(`/editor/${id}`)}
             onRetry={async (id) => {
+              if (busy) return
               const target = items.find((it) => it.id === id)
               if (!target || target.status !== 'failed') return
-
-              const runningItem: Item = {
-                ...target,
-                status: 'running',
-                errorMessage: undefined,
-              }
-              appendWorkspaceItems([runningItem])
-              upsertItems([runningItem])
               setWorkspaceBusy(true)
-
               try {
-                const res = await generateImages({
-                  prompts: [target.prompt],
-                  model: target.model,
-                  referenceImages: referenceImages.map((img) => img.dataUrl),
-                })
-                const out = res.items[0]
-                if (!out) throw new Error('Empty response')
-                const nextItem: Item = {
-                  ...target,
-                  status: out.status,
-                  imageUrl: out.imageUrl,
-                  errorMessage: out.errorMessage,
-                  proxyUrl: toProxyUrl(out.imageUrl),
-                }
-                appendWorkspaceItems([nextItem])
-                upsertItems([nextItem])
-              } catch {
-                const failedItem: Item = {
-                  ...target,
-                  status: 'failed',
-                  errorMessage: 'Generation failed',
-                }
-                appendWorkspaceItems([failedItem])
-                upsertItems([failedItem])
+                await retryOne(target)
               } finally {
                 setWorkspaceBusy(false)
               }
