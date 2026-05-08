@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import TopNav from '@/components/TopNav'
 import PromptListEditor from '@/components/PromptListEditor'
+import PromptTemplateBuilder from '@/components/PromptTemplateBuilder'
 import ModelSelector from '@/components/ModelSelector'
 import ResultsGrid from '@/components/ResultsGrid'
 import { cn } from '@/lib/utils'
@@ -118,6 +119,12 @@ export default function Home() {
       <TopNav />
       <div className="mx-auto grid max-w-6xl gap-6 px-6 py-6 lg:grid-cols-[420px_1fr]">
         <div className="space-y-4">
+          <PromptTemplateBuilder
+            remainingSlots={Math.max(0, 10 - prompts.length)}
+            onGenerate={(generatedPrompts) => {
+              setPrompts((prev) => [...prev, ...generatedPrompts].slice(0, 10))
+            }}
+          />
           <PromptListEditor prompts={prompts} onChange={setPrompts} max={10} />
           <ModelSelector value={model} onChange={setModel} />
 
