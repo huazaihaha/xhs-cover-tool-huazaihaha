@@ -6,6 +6,7 @@ import ModelSelector from '@/components/ModelSelector'
 import ResultsGrid from '@/components/ResultsGrid'
 import { cn } from '@/lib/utils'
 import { generateImages } from '@/utils/api'
+import { buildCoverFilename } from '@/utils/filename'
 import type { GenerateResultItem, ModelName } from '../../shared/types'
 import { useGalleryStore } from '@/store/useGalleryStore'
 import { Download, Loader2, Sparkles, Upload, X } from 'lucide-react'
@@ -39,12 +40,15 @@ function downloadBlob(blob: Blob, filename: string) {
 export default function Home() {
   const navigate = useNavigate()
   const upsertItems = useGalleryStore((s) => s.upsertItems)
+  const items = useGalleryStore((s) => s.workspaceItems)
+  const busy = useGalleryStore((s) => s.workspaceBusy)
+  const appendWorkspaceItems = useGalleryStore((s) => s.appendWorkspaceItems)
+  const replaceWorkspaceRun = useGalleryStore((s) => s.replaceWorkspaceRun)
+  const setWorkspaceBusy = useGalleryStore((s) => s.setWorkspaceBusy)
 
   const [prompts, setPrompts] = useState<string[]>([''])
   const [model, setModel] = useState<ModelName>('image2')
-  const [items, setItems] = useState<Item[]>([])
   const [selected, setSelected] = useState<Record<string, boolean>>({})
-  const [busy, setBusy] = useState(false)
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -164,17 +168,18 @@ export default function Home() {
                     .slice(0, 10)
                   if (!normalized.length) return
 
-                  setBusy(true)
+                  const runId = `run_${Date.now()}`
+                  setWorkspaceBusy(true)
                   setSelected({})
 
                   const running: Item[] = normalized.map((prompt, idx) => ({
-                    id: `${Date.now()}_${idx}`,
+                    id: `${runId}_${idx}`,
                     prompt,
                     model,
                     status: 'running',
                     createdAt: new Date().toISOString(),
                   }))
-                  setItems(running)
+                  appendWorkspaceItems(running)
 
                   try {
                     const res = await generateImages({
@@ -186,10 +191,21 @@ export default function Home() {
                       ...it,
                       proxyUrl: toProxyUrl(it.imageUrl),
                     }))
-                    setItems(next)
+                    replaceWorkspaceRun(runId, next)
                     upsertItems(next)
+                  } catch {
+                    const failed: Item[] = normalized.map((prompt, idx) => ({
+                      id: `${runId}_failed_${idx}`,
+                      prompt,
+                      model,
+                      status: 'failed',
+                      errorMessage: 'Generation failed',
+                      createdAt: new Date().toISOString(),
+                    }))
+                    replaceWorkspaceRun(runId, failed)
+                    upsertItems(failed)
                   } finally {
-                    setBusy(false)
+                    setWorkspaceBusy(false)
                   }
                 }}
                 className={cn(
@@ -219,7 +235,7 @@ export default function Home() {
                         const res = await fetch(url)
                         const blob = await res.blob()
                         const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'bin'
-                        const filename = `${String(idx + 1).padStart(2, '0')}_${it.model}_${stamp}.${ext}`
+                        const filename = buildCoverFilename(it.prompt, idx + 1, ext)
                         zip.file(filename, blob)
                       }),
                     )
@@ -290,7 +306,9 @@ export default function Home() {
             onCopyPrompt={async (prompt) => {
               try {
                 await navigator.clipboard.writeText(prompt)
-              } catch {}
+              } catch {
+                // ignore clipboard permission errors
+              }
             }}
           />
         </div>

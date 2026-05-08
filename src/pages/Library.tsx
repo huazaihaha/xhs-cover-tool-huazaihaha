@@ -3,6 +3,7 @@ import JSZip from 'jszip'
 import TopNav from '@/components/TopNav'
 import { useGalleryStore } from '@/store/useGalleryStore'
 import { cn } from '@/lib/utils'
+import { buildCoverFilename } from '@/utils/filename'
 import { Download, Trash2, X } from 'lucide-react'
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -77,7 +78,7 @@ export default function Library() {
                     const res = await fetch(url)
                     const blob = await res.blob()
                     const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'bin'
-                    const filename = `${String(idx + 1).padStart(2, '0')}_${it.model}_${stamp}.${ext}`
+                    const filename = buildCoverFilename(it.prompt, idx + 1, ext)
                     zip.file(filename, blob)
                   }),
                 )
@@ -175,4 +176,3 @@ export default function Library() {
     </div>
   )
 }
-
