@@ -46,25 +46,13 @@ type AuthResponse = {
   token?: string
   user?: AuthUser
   error?: string
-  debugCode?: string
-  delivery?: 'mock' | 'smtp' | 'resend'
 }
 
 function authHeaders(token?: string) {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-export async function authSendCode(body: { email: string; purpose: 'register' | 'login' }) {
-  const res = await fetch(withApiBase('/api/auth/send-code'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const json = (await res.json()) as AuthResponse
-  return { ok: res.ok, ...json }
-}
-
-export async function authRegister(body: { email: string; code: string; password: string }) {
+export async function authRegister(body: { email: string; password: string }) {
   const res = await fetch(withApiBase('/api/auth/register'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -76,16 +64,6 @@ export async function authRegister(body: { email: string; code: string; password
 
 export async function authLoginWithPassword(body: { email: string; password: string }) {
   const res = await fetch(withApiBase('/api/auth/login/password'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const json = (await res.json()) as AuthResponse
-  return { ok: res.ok, ...json }
-}
-
-export async function authLoginWithCode(body: { email: string; code: string }) {
-  const res = await fetch(withApiBase('/api/auth/login/code'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
