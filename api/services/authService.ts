@@ -170,6 +170,9 @@ export function revokeSession(token: string) {
 
 export async function sendCodeEmail(email: string, code: string) {
   const from = process.env.AUTH_EMAIL_FROM
+  const resendApiKey = process.env.AUTH_RESEND_API_KEY
+  const resendBaseUrl = process.env.AUTH_RESEND_BASE_URL || 'https://api.resend.com'
+  const resendTimeout = Number(process.env.AUTH_RESEND_TIMEOUT_MS || 10000)
   const smtpHost = process.env.AUTH_SMTP_HOST
   const smtpPort = Number(process.env.AUTH_SMTP_PORT || 0)
   const smtpUser = process.env.AUTH_SMTP_USER
@@ -177,6 +180,43 @@ export async function sendCodeEmail(email: string, code: string) {
   const connectTimeout = Number(process.env.AUTH_SMTP_CONNECT_TIMEOUT_MS || 10000)
   const greetingTimeout = Number(process.env.AUTH_SMTP_GREETING_TIMEOUT_MS || 10000)
   const socketTimeout = Number(process.env.AUTH_SMTP_SOCKET_TIMEOUT_MS || 15000)
+  if (from && resendApiKey) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), resendTimeout)
+    try {
+      const resp = await fetch(`${resendBaseUrl.replace(/\/+$/, '')}/emails`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${resendApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from,
+          to: email,
+          subject: '登录验证码',
+          text: `你的验证码是：${code}，10分钟内有效。`,
+        }),
+        signal: controller.signal,
+      })
+      const raw = await resp.text()
+      if (!resp.ok) {
+        console.error(
+          `[Auth Resend] failed to=${email} status=${resp.status} body=${raw.slice(0, 300)}`,
+        )
+      } else {
+        console.log(
+          `[Auth Resend] sent to=${email} status=${resp.status} body=${raw.slice(0, 300)}`,
+        )
+        return { delivery: 'resend' as const }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`[Auth Resend] failed to=${email} error=${msg}`)
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   if (!from || !smtpHost || !smtpPort || !smtpUser || !smtpPass) {
     console.log(`[Auth Mock Email] to=${email} code=${code}`)
     return { delivery: 'mock' as const }

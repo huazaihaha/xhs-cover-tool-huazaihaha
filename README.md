@@ -7,6 +7,9 @@
 2. 在 Render 环境变量中填写：
    - `PLATO_BASE_URL=https://api.bltcy.ai/`
    - `PLATO_API_KEY=你的柏拉图密钥`
+   - `AUTH_EMAIL_FROM=你的发件邮箱（需在 Resend 验证）`
+   - `AUTH_RESEND_API_KEY=你的 Resend API Key`
+   - （可选兜底）`AUTH_SMTP_HOST/AUTH_SMTP_PORT/AUTH_SMTP_USER/AUTH_SMTP_PASS`
 3. 部署完成后拿到后端 URL，例如 `https://xxx.onrender.com`。
 
 ### 2. 前端部署（GitHub Pages）

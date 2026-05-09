@@ -47,7 +47,7 @@ type AuthResponse = {
   user?: AuthUser
   error?: string
   debugCode?: string
-  delivery?: 'mock' | 'smtp'
+  delivery?: 'mock' | 'smtp' | 'resend'
 }
 
 function authHeaders(token?: string) {
