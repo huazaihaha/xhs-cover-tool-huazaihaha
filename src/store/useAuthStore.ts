@@ -6,13 +6,22 @@ type AuthUser = {
   email: string
 }
 
+type UsageQuota = {
+  limit: number
+  used: number
+  remaining: number
+  month: string
+}
+
 type AuthState = {
   token: string
   user: AuthUser | null
   loginCount: number
   firstLoginAt: string
+  quota: UsageQuota | null
   hydrated: boolean
   setAuth: (token: string, user: AuthUser) => void
+  setQuota: (quota: UsageQuota | null) => void
   clearAuth: () => void
   setHydrated: (v: boolean) => void
 }
@@ -24,6 +33,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       loginCount: 0,
       firstLoginAt: '',
+      quota: null,
       hydrated: false,
       setAuth: (token, user) =>
         set((state) => ({
@@ -32,7 +42,8 @@ export const useAuthStore = create<AuthState>()(
           loginCount: state.loginCount + 1,
           firstLoginAt: state.firstLoginAt || new Date().toISOString(),
         })),
-      clearAuth: () => set({ token: '', user: null }),
+      setQuota: (quota) => set({ quota }),
+      clearAuth: () => set({ token: '', user: null, quota: null }),
       setHydrated: (hydrated) => set({ hydrated }),
     }),
     {
@@ -42,6 +53,7 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         loginCount: state.loginCount,
         firstLoginAt: state.firstLoginAt,
+        quota: state.quota,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true)

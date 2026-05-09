@@ -1,8 +1,9 @@
+import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { Layers3, LogOut, Settings2, Sparkles } from 'lucide-react'
 import { useAuthStore } from '@/store/useAuthStore'
-import { authLogout } from '@/utils/api'
+import { authGetUsageQuota, authLogout } from '@/utils/api'
 
 const items = [
   { to: '/', label: '工作台', icon: Sparkles },
@@ -13,7 +14,28 @@ const items = [
 export default function TopNav() {
   const location = useLocation()
   const token = useAuthStore((s) => s.token)
+  const quota = useAuthStore((s) => s.quota)
+  const setQuota = useAuthStore((s) => s.setQuota)
   const clearAuth = useAuthStore((s) => s.clearAuth)
+
+  useEffect(() => {
+    let cancelled = false
+    if (!token) {
+      setQuota(null)
+      return
+    }
+    void authGetUsageQuota(token)
+      .then((resp) => {
+        if (cancelled) return
+        if (resp.ok && resp.quota) setQuota(resp.quota)
+      })
+      .catch(() => {
+        if (cancelled) return
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, setQuota])
 
   return (
     <div className="sticky top-0 z-20 border-b border-white/10 bg-zinc-950/70 backdrop-blur">
@@ -27,6 +49,11 @@ export default function TopNav() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {token && quota ? (
+            <div className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-100">
+              本月剩余 {quota.remaining}/{quota.limit}
+            </div>
+          ) : null}
           {items.map((it) => {
             const active =
               it.to === '/'

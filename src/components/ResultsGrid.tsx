@@ -60,7 +60,7 @@ export default function ResultsGrid({
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
       {items.map((it) => {
         const checked = !!selected[it.id]
-        const src = it.proxyUrl || it.imageUrl
+        const src = it.imageUrl || it.proxyUrl
         return (
           <div
             key={it.id}

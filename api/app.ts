@@ -15,6 +15,7 @@ import authRoutes from './routes/auth.js'
 import generateRoutes from './routes/generate.js'
 import imageRoutes from './routes/image.js'
 import namingRoutes from './routes/naming.js'
+import usageRoutes from './routes/usage.js'
 
 // for esm mode
 const __filename = fileURLToPath(import.meta.url)
@@ -36,6 +37,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/generate', generateRoutes)
 app.use('/api/image', imageRoutes)
 app.use('/api/naming', namingRoutes)
+app.use('/api/usage', usageRoutes)
 
 /**
  * health

@@ -22,6 +22,14 @@ export type GenerateResultItem = {
 
 export type GenerateResponse = {
   items: GenerateResultItem[]
+  errorCode?: 'AUTH_REQUIRED' | 'FREE_QUOTA_EXCEEDED' | 'FREE_QUOTA_INSUFFICIENT'
+  message?: string
+  quota?: {
+    limit: number
+    used: number
+    remaining: number
+    month: string
+  }
 }
 
 export type NamingRequestItem = {

@@ -18,6 +18,10 @@ type Props = {
 }
 
 const STORAGE_KEY = 'xhs-cover-template-builder-v1'
+const EXAMPLE_TEMPLATE = `帮我生成一个PPT可视化排版风格的小红书首图封面，要求如下：
+1.尺寸比例为3:4；
+2.所属行业赛道为：{{行业名称}}；
+3.整体色调采用：{{颜色}}；`
 
 function extractPlaceholders(template: string) {
   const regex = /(?:{{\s*([^{}]+?)\s*}}|【\s*([^【】]+?)\s*】)/g
@@ -41,6 +45,14 @@ function renderTemplate(template: string, mapping: Record<string, string>) {
     const key = raw.trim()
     return Object.prototype.hasOwnProperty.call(mapping, key) ? mapping[key] : ''
   })
+}
+
+function countInputLines(valuesText: string) {
+  if (!valuesText.trim()) return 0
+  return valuesText
+    .split('\n')
+    .map((v) => v.trim())
+    .filter(Boolean).length
 }
 
 function buildAlignedRows(keys: string[], valuesMap: Record<string, string[]>) {
@@ -96,13 +108,40 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
   }, [template, params])
 
   const placeholders = useMemo(() => extractPlaceholders(template), [template])
+  const syncParamsFromTemplate = (tpl: string) => {
+    const detected = extractPlaceholders(tpl)
+    if (!detected.length) {
+      setMessage('未识别到参数，请先在模版中填写参数标记')
+      return 0
+    }
+    setParams((prev) => {
+      const byName = new Map(prev.map((p) => [p.name.trim(), p]))
+      const synced = detected.map((name, idx) => {
+        const existing = byName.get(name)
+        return (
+          existing || {
+            id: `p_${Date.now()}_${idx}`,
+            name,
+            valuesText: '',
+          }
+        )
+      })
+      for (const item of prev) {
+        const n = item.name.trim()
+        if (!n || detected.includes(n)) continue
+        synced.push(item)
+      }
+      return synced
+    })
+    return detected.length
+  }
 
   return (
-    <div className="max-h-[76vh] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900/95 p-4">
+    <div className="max-h-[78vh] overflow-y-auto p-2">
       <div className="mb-4 flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold text-zinc-50">批量设置提示词</div>
-          <div className="text-xs text-zinc-400">参数名请用中文方头括号包裹，参数值按行填写</div>
+          <div className="text-base font-semibold text-zinc-50">设置提示词模版</div>
+          <div className="text-xs text-white">模版中的参数请用{'{{参数名}}'}格式，参数值按行填写</div>
         </div>
         <button
           type="button"
@@ -120,46 +159,37 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
       </div>
 
       <div className="rounded-xl border border-white/10 bg-zinc-950/40 p-3">
-        <div className="mb-2 text-[11px] text-zinc-500">模版文本</div>
-        <textarea
-          value={template}
-          onChange={(e) => setTemplate(e.target.value)}
-          rows={4}
-          placeholder="例：帮我生成【行业】赛道的【风格】风格小红书封面，主色调【颜色】"
-          className="w-full resize-y rounded-lg bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
-        />
-        <div className="mt-2 text-[11px] text-zinc-500">
-          检测到参数：{placeholders.length ? placeholders.join('、') : '无'}
-        </div>
-        <div className="mt-2 flex justify-end">
+        <div className="mb-2 flex items-center justify-between">
+          <div />
           <button
             type="button"
             onClick={() => {
-              const detected = extractPlaceholders(template)
-              if (!detected.length) {
-                setMessage('未识别到参数，请先在模版中填写参数标记')
-                return
-              }
-              setParams((prev) => {
-                const byName = new Map(prev.map((p) => [p.name.trim(), p]))
-                const synced = detected.map((name, idx) => {
-                  const existing = byName.get(name)
-                  return (
-                    existing || {
-                      id: `p_${Date.now()}_${idx}`,
-                      name,
-                      valuesText: '',
-                    }
-                  )
-                })
-                for (const item of prev) {
-                  const n = item.name.trim()
-                  if (!n || detected.includes(n)) continue
-                  synced.push(item)
-                }
-                return synced
-              })
-              setMessage(`已识别 ${detected.length} 个参数`)
+              setTemplate(EXAMPLE_TEMPLATE)
+              const count = syncParamsFromTemplate(EXAMPLE_TEMPLATE)
+              setMessage(count ? `已插入示例，并识别 ${count} 个参数` : '已插入示例')
+            }}
+            className="rounded-full bg-white/10 px-3 py-1 text-xs text-zinc-100 transition hover:bg-white/15"
+          >
+            插入示例
+          </button>
+        </div>
+        <textarea
+          value={template}
+          onChange={(e) => setTemplate(e.target.value)}
+          rows={7}
+          placeholder={EXAMPLE_TEMPLATE}
+          className="w-full resize-y rounded-lg bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+        />
+        <div className="mt-2 flex items-center justify-between gap-3">
+          <div className="text-[11px] text-zinc-500">
+            检测到参数：{placeholders.length ? placeholders.join('、') : '无'}
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const count = syncParamsFromTemplate(template)
+              if (!count) return
+              setMessage(`已识别 ${count} 个参数`)
             }}
             className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-400/25"
           >
@@ -201,6 +231,9 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
               placeholder="每行一个值，例如：\n知识付费\n职场成长"
               className="w-full resize-y rounded-lg bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600"
             />
+            <div className="mt-1 text-right text-[11px] text-zinc-500">
+              已输入 {countInputLines(param.valuesText)} 行
+            </div>
           </div>
         ))}
       </div>

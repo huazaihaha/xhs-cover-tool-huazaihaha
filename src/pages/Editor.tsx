@@ -16,7 +16,7 @@ export default function Editor() {
 
   const imageUrl = useMemo(() => {
     if (!item) return null
-    return item.proxyUrl || item.imageUrl || null
+    return item.imageUrl || item.proxyUrl || null
   }, [item])
 
   return (
@@ -55,4 +55,3 @@ export default function Editor() {
     </div>
   )
 }
-

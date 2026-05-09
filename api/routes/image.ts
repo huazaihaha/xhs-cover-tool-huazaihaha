@@ -56,7 +56,18 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   try {
-    const upstream = await fetch(url.toString(), { method: 'GET' })
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15000)
+    const upstream = await fetch(url.toString(), {
+      method: 'GET',
+      headers: {
+        Accept: 'image/*,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (compatible; CoverToolImageProxy/1.0)',
+      },
+      signal: controller.signal,
+    }).finally(() => {
+      clearTimeout(timeout)
+    })
     if (!upstream.ok || !upstream.body) {
       res.status(502).json({ success: false, error: 'Upstream error' })
       return
@@ -65,19 +76,11 @@ router.get('/', async (req: Request, res: Response) => {
     const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
     res.setHeader('Content-Type', contentType)
     res.setHeader('Cache-Control', 'no-store')
-    res.status(200)
-
-    const reader = upstream.body.getReader()
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      if (value) res.write(Buffer.from(value))
-    }
-    res.end()
+    const arr = await upstream.arrayBuffer()
+    res.status(200).send(Buffer.from(arr))
   } catch {
     res.status(502).json({ success: false, error: 'Upstream error' })
   }
 })
 
 export default router
-

@@ -50,7 +50,7 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
         className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-200"
       >
         <Sparkles className="h-4 w-4" />
-        批量设置提示词
+        批量创建提示词
       </button>
 
       <div className="mb-3 flex items-center justify-between">
@@ -108,22 +108,24 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
         {visiblePrompts.map((value, idx) => (
           <div
             key={idx}
-            className="group flex items-stretch gap-2 rounded-xl border border-white/10 bg-zinc-950/40 p-2"
+            className="group relative rounded-xl border border-white/10 bg-zinc-950/40 p-2"
           >
-            <div className="flex w-8 items-center justify-center text-xs text-zinc-100">
-              {idx + 1}
+            <div className="absolute left-2 top-2 inline-flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelected((s) => ({ ...s, [idx]: !s[idx] }))}
+                className={cn(
+                  'inline-flex h-6 w-6 items-center justify-center rounded-md text-zinc-300 transition',
+                  selected[idx] ? 'bg-emerald-400/20 text-emerald-200' : 'bg-white/10 hover:bg-white/15 hover:text-zinc-50',
+                )}
+                aria-label="选择提示词"
+              >
+                {selected[idx] ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+              </button>
+              <div className="inline-flex h-6 min-w-6 items-center justify-center rounded-md bg-white/10 px-1.5 text-xs text-zinc-100">
+                {idx + 1}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setSelected((s) => ({ ...s, [idx]: !s[idx] }))}
-              className={cn(
-                'inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-300 transition',
-                selected[idx] ? 'bg-emerald-400/20 text-emerald-200' : 'hover:bg-white/5 hover:text-zinc-50',
-              )}
-              aria-label="选择提示词"
-            >
-              {selected[idx] ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            </button>
             <textarea
               ref={(el) => {
                 textareaRefs.current[idx] = el
@@ -142,9 +144,10 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
               }}
               placeholder="例如：黑底极简小红书封面，标题“30天减脂计划”，白色粗体字，留足边距"
               rows={1}
-              className="max-h-40 min-h-10 w-full resize-none overflow-auto rounded-lg bg-transparent px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
+              className="max-h-40 min-h-24 w-full resize-none overflow-y-auto rounded-lg bg-transparent px-3 pb-12 pt-11 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 [&::-webkit-scrollbar]:hidden"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             />
-            <div className="flex items-center gap-1">
+            <div className="absolute bottom-2 right-2 flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => {

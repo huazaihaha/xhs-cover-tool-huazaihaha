@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import {
+  authGetUsageQuota,
   authLoginWithPassword,
   authRegister,
 } from '@/utils/api'
@@ -12,6 +13,7 @@ type AuthTab = 'register' | 'login'
 export default function AuthPage() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
+  const setQuota = useAuthStore((s) => s.setQuota)
 
   const [tab, setTab] = useState<AuthTab>('register')
   const [email, setEmail] = useState('')
@@ -95,6 +97,10 @@ export default function AuthPage() {
                       return
                     }
                     setAuth(resp.token, resp.user)
+                    const quotaResp = await authGetUsageQuota(resp.token).catch(() => null)
+                    if (quotaResp?.ok && quotaResp.quota) {
+                      setQuota(quotaResp.quota)
+                    }
                     navigate('/')
                   } finally {
                     setBusy(false)

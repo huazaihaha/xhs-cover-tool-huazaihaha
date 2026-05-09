@@ -238,7 +238,7 @@ export default function Library() {
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {batch.items.map((it) => {
                     const checked = !!selected[it.id]
-                    const src = it.editedUrl || it.proxyUrl || it.imageUrl
+                    const src = it.editedUrl || it.imageUrl || it.proxyUrl
                     return (
                       <button
                         key={it.id}

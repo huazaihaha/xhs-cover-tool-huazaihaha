@@ -45,6 +45,8 @@ function downloadBlob(blob: Blob, filename: string) {
 export default function Home() {
   const navigate = useNavigate()
   const token = useAuthStore((s) => s.token)
+  const quota = useAuthStore((s) => s.quota)
+  const setQuota = useAuthStore((s) => s.setQuota)
   const upsertItems = useGalleryStore((s) => s.upsertItems)
   const items = useGalleryStore((s) => s.workspaceItems)
   const busy = useGalleryStore((s) => s.workspaceBusy)
@@ -58,6 +60,9 @@ export default function Home() {
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([])
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
+  const [quotaModalOpen, setQuotaModalOpen] = useState(false)
+  const [quotaNotice, setQuotaNotice] = useState('')
+  const [qrBroken, setQrBroken] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const activeRunRef = useRef<{ runId: string; controller: AbortController } | null>(null)
   const namingInFlightRef = useRef(false)
@@ -88,6 +93,9 @@ export default function Home() {
     if (token) return true
     navigate('/auth')
     return false
+  }
+  const openQuotaLimitModal = () => {
+    setQuotaModalOpen(true)
   }
 
   const ensureNamingReady = async (list: Item[]) => {
@@ -122,6 +130,10 @@ export default function Home() {
   }, [items])
 
   const retryOne = async (target: Item) => {
+    if (quota && quota.remaining < 1) {
+      openQuotaLimitModal()
+      return
+    }
     const runningItem: Item = {
       ...target,
       status: 'running',
@@ -131,11 +143,26 @@ export default function Home() {
     upsertItems([runningItem])
 
     try {
+      setQuotaNotice('本次重试将消耗 1 次额度')
       const res = await generateImages({
         prompts: [target.prompt],
         model: target.model,
         referenceImages: referenceImages.map((img) => img.dataUrl),
-      })
+      }, undefined, token)
+      if (!res.ok) {
+        if (res.quota) setQuota(res.quota)
+        if (res.errorCode === 'FREE_QUOTA_EXCEEDED' || res.errorCode === 'FREE_QUOTA_INSUFFICIENT') {
+          openQuotaLimitModal()
+          appendWorkspaceItems([target])
+          upsertItems([target])
+          return
+        }
+        throw new Error(res.message || '生成失败')
+      }
+      if (res.quota) {
+        setQuota(res.quota)
+        setQuotaNotice(`已消耗 1 次额度，当前剩余 ${res.quota.remaining}/${res.quota.limit}`)
+      }
       const out = res.items[0]
       if (!out) throw new Error('Empty response')
       const nextItem: Item = {
@@ -148,11 +175,12 @@ export default function Home() {
       appendWorkspaceItems([nextItem])
       upsertItems([nextItem])
       if (nextItem.status === 'succeeded') void ensureNamingReady([nextItem])
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Generation failed'
       const failedItem: Item = {
         ...target,
         status: 'failed',
-        errorMessage: 'Generation failed',
+        errorMessage: message,
       }
       appendWorkspaceItems([failedItem])
       upsertItems([failedItem])
@@ -275,12 +303,18 @@ export default function Home() {
                     .map((p) => p.trim())
                     .filter(Boolean)
                   if (!normalized.length) return
+                  if (quota && quota.remaining < normalized.length) {
+                    openQuotaLimitModal()
+                    return
+                  }
 
                   const runId = `run_${Date.now()}`
+                  setQuotaNotice(`本次将消耗 ${normalized.length} 次额度`)
                   const controller = new AbortController()
                   activeRunRef.current = { runId, controller }
                   setWorkspaceBusy(true)
                   setSelected({})
+                  setQuotaNotice('')
 
                   const running: Item[] = normalized.map((prompt, idx) => ({
                     id: `${runId}_${idx}`,
@@ -296,7 +330,22 @@ export default function Home() {
                       prompts: normalized,
                       model,
                       referenceImages: referenceImages.map((img) => img.dataUrl),
-                    }, controller.signal)
+                    }, controller.signal, token)
+                    if (!res.ok) {
+                      if (res.quota) setQuota(res.quota)
+                      if (res.errorCode === 'FREE_QUOTA_EXCEEDED' || res.errorCode === 'FREE_QUOTA_INSUFFICIENT') {
+                        replaceWorkspaceRun(runId, [])
+                        openQuotaLimitModal()
+                        return
+                      }
+                      throw new Error(res.message || 'Generation failed')
+                    }
+                    if (res.quota) {
+                      setQuota(res.quota)
+                      setQuotaNotice(
+                        `本次已消耗 ${normalized.length} 次额度，当前剩余 ${res.quota.remaining}/${res.quota.limit}`,
+                      )
+                    }
                     const next: Item[] = res.items.map((it) => ({
                       ...it,
                       proxyUrl: toProxyUrl(it.imageUrl),
@@ -304,14 +353,20 @@ export default function Home() {
                     replaceWorkspaceRun(runId, next)
                     upsertItems(next)
                     void ensureNamingReady(next)
-                  } catch {
+                  } catch (err) {
                     const stopped = controller.signal.aborted
+                    const message = err instanceof Error ? err.message : 'Generation failed'
+                    if (!stopped && message.includes('免费额度')) {
+                      replaceWorkspaceRun(runId, [])
+                      openQuotaLimitModal()
+                      return
+                    }
                     const failed: Item[] = normalized.map((prompt, idx) => ({
                       id: `${runId}_${idx}`,
                       prompt,
                       model,
                       status: 'failed',
-                      errorMessage: stopped ? 'Stopped' : 'Generation failed',
+                      errorMessage: stopped ? 'Stopped' : message,
                       createdAt: new Date().toISOString(),
                     }))
                     replaceWorkspaceRun(runId, failed)
@@ -407,7 +462,13 @@ export default function Home() {
                 批量下载（{selectedSucceeded.length}）
               </button>
 
+          {quotaNotice ? (
+            <div className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-xs text-amber-100">
+              {quotaNotice}
+            </div>
+          ) : null}
         </aside>
+
 
         <div className="space-y-4">
           <div className="flex items-center justify-end gap-2">
@@ -491,24 +552,56 @@ export default function Home() {
 
       {templateModalOpen ? (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-3xl rounded-3xl border border-white/10 bg-zinc-900/95 p-4 shadow-2xl">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm font-semibold text-zinc-50">批量设置提示词</div>
+          <div className="relative w-full max-w-4xl rounded-3xl border border-white/10 bg-zinc-900/95 p-4 shadow-2xl">
               <button
                 type="button"
                 onClick={() => setTemplateModalOpen(false)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-zinc-50"
+                className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-zinc-50"
                 aria-label="关闭弹窗"
               >
                 <X className="h-4 w-4" />
               </button>
-            </div>
             <PromptTemplateBuilder
               onGenerate={(generatedPrompts) => {
                 setPrompts((prev) => [...prev, ...generatedPrompts])
                 setTemplateModalOpen(false)
               }}
             />
+          </div>
+        </div>
+      ) : null}
+
+      {quotaModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-emerald-200/25 bg-zinc-900/95 p-6 text-center shadow-[0_30px_100px_-40px_rgba(16,185,129,0.65)]">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(28rem_16rem_at_50%_-10%,rgba(16,185,129,0.24),transparent_70%),radial-gradient(24rem_14rem_at_100%_110%,rgba(59,130,246,0.18),transparent_70%)]" />
+            <div className="relative">
+              <div className="text-2xl font-bold text-zinc-50">本月可使用剩余额度不足</div>
+              <div className="mt-3 text-sm leading-6 text-zinc-100/95">
+                若你想购买更多使用额度，请微信扫码添加三白微信，获取更多使用额度。
+              </div>
+              <div className="mt-5 rounded-2xl border border-white/15 bg-white p-3">
+                {!qrBroken ? (
+                  <img
+                    src={withApiBase('/wechat-qr.png')}
+                    alt="三白微信二维码"
+                    className="mx-auto w-full max-w-[280px] rounded-xl"
+                    onError={() => setQrBroken(true)}
+                  />
+                ) : (
+                  <div className="mx-auto flex h-[280px] w-full max-w-[280px] items-center justify-center rounded-xl border border-zinc-200 bg-zinc-50 px-4 text-center text-sm text-zinc-600">
+                    未检测到二维码图片，请将二维码文件放到 public/wechat-qr.png
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setQuotaModalOpen(false)}
+              className="relative mt-5 inline-flex rounded-xl bg-emerald-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-200"
+            >
+              我知道了
+            </button>
           </div>
         </div>
       ) : null}
