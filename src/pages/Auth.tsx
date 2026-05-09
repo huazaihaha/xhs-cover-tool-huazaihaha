@@ -9,13 +9,15 @@ import {
 } from '@/utils/api'
 import { useAuthStore } from '@/store/useAuthStore'
 
-type Mode = 'register' | 'login-password' | 'login-code'
+type AuthTab = 'register' | 'login'
+type LoginMode = 'password' | 'code'
 
 export default function AuthPage() {
   const navigate = useNavigate()
   const setAuth = useAuthStore((s) => s.setAuth)
 
-  const [mode, setMode] = useState<Mode>('register')
+  const [tab, setTab] = useState<AuthTab>('register')
+  const [loginMode, setLoginMode] = useState<LoginMode>('password')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
@@ -24,58 +26,90 @@ export default function AuthPage() {
   const [msg, setMsg] = useState('')
 
   const codePurpose = useMemo(
-    () => (mode === 'register' ? 'register' : 'login') as 'register' | 'login',
-    [mode],
+    () => (tab === 'register' ? 'register' : 'login') as 'register' | 'login',
+    [tab],
   )
+  const isRegister = tab === 'register'
+  const isLoginByCode = tab === 'login' && loginMode === 'code'
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-6 text-zinc-100">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 p-6">
-        <div className="mb-5">
-          <div className="text-lg font-semibold">登录 / 注册</div>
-          <div className="text-xs text-zinc-400">支持邮箱验证码注册、邮箱密码登录、邮箱验证码登录</div>
+    <div className="min-h-screen bg-zinc-950 px-6 py-12 text-zinc-100">
+      <div className="mx-auto w-full max-w-2xl">
+        <div className="mb-6">
+          <div className="text-2xl font-semibold">账号中心</div>
+          <div className="mt-1 text-sm text-zinc-400">通过 Tab 切换注册与登录，支持邮箱验证码和密码两种方式</div>
         </div>
 
-        <div className="mb-4 grid grid-cols-3 gap-2">
+        <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/5 p-2">
           <button
             type="button"
-            onClick={() => setMode('register')}
+            onClick={() => {
+              setTab('register')
+              setMsg('')
+            }}
             className={cn(
-              'rounded-xl px-2 py-2 text-xs transition',
-              mode === 'register'
+              'rounded-xl px-3 py-2 text-sm font-medium transition',
+              tab === 'register'
                 ? 'bg-emerald-300 text-zinc-950'
-                : 'bg-white/5 text-zinc-300 hover:bg-white/10',
+                : 'bg-transparent text-zinc-300 hover:bg-white/10',
             )}
           >
-            注册
+            注册账号
           </button>
           <button
             type="button"
-            onClick={() => setMode('login-password')}
+            onClick={() => {
+              setTab('login')
+              setMsg('')
+            }}
             className={cn(
-              'rounded-xl px-2 py-2 text-xs transition',
-              mode === 'login-password'
+              'rounded-xl px-3 py-2 text-sm font-medium transition',
+              tab === 'login'
                 ? 'bg-emerald-300 text-zinc-950'
-                : 'bg-white/5 text-zinc-300 hover:bg-white/10',
+                : 'bg-transparent text-zinc-300 hover:bg-white/10',
             )}
           >
-            密码登录
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('login-code')}
-            className={cn(
-              'rounded-xl px-2 py-2 text-xs transition',
-              mode === 'login-code'
-                ? 'bg-emerald-300 text-zinc-950'
-                : 'bg-white/5 text-zinc-300 hover:bg-white/10',
-            )}
-          >
-            验证码登录
+            登录账号
           </button>
         </div>
 
-        <div className="space-y-3">
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+          {tab === 'login' ? (
+            <div className="mb-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('password')
+                  setMsg('')
+                }}
+                className={cn(
+                  'rounded-xl px-3 py-2 text-xs transition',
+                  loginMode === 'password'
+                    ? 'bg-white/15 text-zinc-100'
+                    : 'bg-white/5 text-zinc-400 hover:bg-white/10',
+                )}
+              >
+                密码登录
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginMode('code')
+                  setMsg('')
+                }}
+                className={cn(
+                  'rounded-xl px-3 py-2 text-xs transition',
+                  loginMode === 'code'
+                    ? 'bg-white/15 text-zinc-100'
+                    : 'bg-white/5 text-zinc-400 hover:bg-white/10',
+                )}
+              >
+                验证码登录
+              </button>
+            </div>
+          ) : null}
+
+          <div className="space-y-3">
           <input
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -83,7 +117,7 @@ export default function AuthPage() {
             className="w-full rounded-xl border border-white/10 bg-zinc-950/50 px-3 py-2 text-sm outline-none focus:border-emerald-300/40"
           />
 
-          {mode !== 'login-password' ? (
+          {(isRegister || isLoginByCode) ? (
             <div className="flex gap-2">
               <input
                 value={code}
@@ -122,12 +156,12 @@ export default function AuthPage() {
             </div>
           ) : null}
 
-          {mode !== 'login-code' ? (
+          {(isRegister || !isLoginByCode) ? (
             <input
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               type="password"
-              placeholder={mode === 'register' ? '设置密码（至少6位）' : '密码'}
+              placeholder={isRegister ? '设置密码（至少6位）' : '密码'}
               className="w-full rounded-xl border border-white/10 bg-zinc-950/50 px-3 py-2 text-sm outline-none focus:border-emerald-300/40"
             />
           ) : null}
@@ -140,9 +174,9 @@ export default function AuthPage() {
               setMsg('')
               try {
                 const resp =
-                  mode === 'register'
+                  isRegister
                     ? await authRegister({ email, code, password })
-                    : mode === 'login-password'
+                    : loginMode === 'password'
                       ? await authLoginWithPassword({ email, password })
                       : await authLoginWithCode({ email, code })
                 if (!resp.ok || !resp.token || !resp.user) {
@@ -162,13 +196,13 @@ export default function AuthPage() {
                 : 'bg-emerald-300 text-zinc-950 hover:bg-emerald-200',
             )}
           >
-            {busy ? '提交中...' : mode === 'register' ? '注册并登录' : '登录'}
+            {busy ? '提交中...' : isRegister ? '注册并登录' : '登录'}
           </button>
         </div>
 
         {msg ? <div className="mt-3 text-xs text-zinc-400">{msg}</div> : null}
+        </div>
       </div>
     </div>
   )
 }
-

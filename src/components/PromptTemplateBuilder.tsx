@@ -105,40 +105,6 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
         </div>
         <button
           type="button"
-          onClick={() => {
-            const detected = extractPlaceholders(template)
-            if (!detected.length) {
-              setMessage('未识别到占位符，请先在模版中使用 {{参数名}}')
-              return
-            }
-            setParams((prev) => {
-              const byName = new Map(prev.map((p) => [p.name.trim(), p]))
-              const synced = detected.map((name, idx) => {
-                const existing = byName.get(name)
-                return (
-                  existing || {
-                    id: `p_${Date.now()}_${idx}`,
-                    name,
-                    valuesText: '',
-                  }
-                )
-              })
-              for (const item of prev) {
-                const n = item.name.trim()
-                if (!n || detected.includes(n)) continue
-                synced.push(item)
-              }
-              return synced
-            })
-            setMessage(`已识别 ${detected.length} 个参数`)
-          }}
-          className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-400/25"
-        >
-          <Braces className="h-4 w-4" />
-          识别参数
-        </button>
-        <button
-          type="button"
           onClick={() =>
             setParams((prev) => [
               ...prev,
@@ -164,6 +130,42 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
         <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
           <Braces className="h-3.5 w-3.5" />
           检测到占位符：{placeholders.length ? placeholders.join('、') : '无'}
+        </div>
+        <div className="mt-2 flex justify-end">
+          <button
+            type="button"
+            onClick={() => {
+              const detected = extractPlaceholders(template)
+              if (!detected.length) {
+                setMessage('未识别到占位符，请先在模版中使用 {{参数名}}')
+                return
+              }
+              setParams((prev) => {
+                const byName = new Map(prev.map((p) => [p.name.trim(), p]))
+                const synced = detected.map((name, idx) => {
+                  const existing = byName.get(name)
+                  return (
+                    existing || {
+                      id: `p_${Date.now()}_${idx}`,
+                      name,
+                      valuesText: '',
+                    }
+                  )
+                })
+                for (const item of prev) {
+                  const n = item.name.trim()
+                  if (!n || detected.includes(n)) continue
+                  synced.push(item)
+                }
+                return synced
+              })
+              setMessage(`已识别 ${detected.length} 个参数`)
+            }}
+            className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-400/25"
+          >
+            <Braces className="h-4 w-4" />
+            识别参数
+          </button>
         </div>
       </div>
 

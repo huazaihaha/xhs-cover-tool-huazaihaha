@@ -13,8 +13,11 @@ import { useGalleryStore } from '@/store/useGalleryStore'
 import { Download, Loader2, Sparkles, Square, Upload, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-type Item = GenerateResultItem & { proxyUrl?: string }
+type Item = GenerateResultItem & { proxyUrl?: string; namingTags?: NamingTag }
 type ReferenceImage = { id: string; name: string; dataUrl: string }
+type NamingTag = { industry?: string; style?: string; color?: string }
+
+const MAX_REFERENCE_IMAGES = 10
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
 
@@ -46,6 +49,7 @@ export default function Home() {
   const appendWorkspaceItems = useGalleryStore((s) => s.appendWorkspaceItems)
   const replaceWorkspaceRun = useGalleryStore((s) => s.replaceWorkspaceRun)
   const setWorkspaceBusy = useGalleryStore((s) => s.setWorkspaceBusy)
+  const setNamingTags = useGalleryStore((s) => s.setNamingTags)
 
   const [prompts, setPrompts] = useState<string[]>([''])
   const [model, setModel] = useState<ModelName>('image2')
@@ -53,6 +57,7 @@ export default function Home() {
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const activeRunRef = useRef<{ runId: string; controller: AbortController } | null>(null)
+  const namingInFlightRef = useRef(false)
 
   const succeeded = useMemo(
     () => items.filter((i) => i.status === 'succeeded' && (i.proxyUrl || i.imageUrl)),
@@ -73,9 +78,36 @@ export default function Home() {
 
   const canGenerate = prompts.some((p) => p.trim()) && !busy
 
+  const ensureNamingReady = async (list: Item[]) => {
+    const targets = list.filter(
+      (it) => it.status === 'succeeded' && (it.proxyUrl || it.imageUrl) && !it.namingTags,
+    )
+    if (!targets.length || namingInFlightRef.current) return
+
+    namingInFlightRef.current = true
+    try {
+      const namingRes = await generateNaming({
+        items: targets.map((it) => ({
+          id: it.id,
+          prompt: it.prompt,
+          imageUrl: it.proxyUrl || it.imageUrl,
+        })),
+      }).catch(() => ({ items: [] as Array<{ id: string; industry: string; style: string; color: string }> }))
+      if (!namingRes.items.length) return
+      setNamingTags(namingRes.items.map((it) => ({ id: it.id, namingTags: it })))
+    } finally {
+      namingInFlightRef.current = false
+    }
+  }
+
   useEffect(() => {
     if (busy && runningItems.length === 0) setWorkspaceBusy(false)
   }, [busy, runningItems.length, setWorkspaceBusy])
+
+  useEffect(() => {
+    void ensureNamingReady(items)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items])
 
   const retryOne = async (target: Item) => {
     const runningItem: Item = {
@@ -103,6 +135,7 @@ export default function Home() {
       }
       appendWorkspaceItems([nextItem])
       upsertItems([nextItem])
+      if (nextItem.status === 'succeeded') void ensureNamingReady([nextItem])
     } catch {
       const failedItem: Item = {
         ...target,
@@ -133,18 +166,18 @@ export default function Home() {
                 <div className="mb-2 flex items-center justify-between">
                   <div>
                     <div className="text-xs font-semibold text-zinc-200">参考图</div>
-                    <div className="text-[11px] text-zinc-500">最多 4 张，单张建议不超过 4MB</div>
+                    <div className="text-[11px] text-zinc-500">最多 10 张，单张建议不超过 4MB</div>
                   </div>
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className={cn(
                       'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition',
-                      referenceImages.length < 4
+                      referenceImages.length < MAX_REFERENCE_IMAGES
                         ? 'bg-white/10 text-zinc-200 hover:bg-white/15 hover:text-zinc-50'
                         : 'cursor-not-allowed bg-white/5 text-zinc-600',
                     )}
-                    disabled={referenceImages.length >= 4}
+                    disabled={referenceImages.length >= MAX_REFERENCE_IMAGES}
                   >
                     <Upload className="h-4 w-4" />
                     上传
@@ -159,7 +192,7 @@ export default function Home() {
                       const files = Array.from(e.target.files || [])
                       if (!files.length) return
 
-                      const slots = Math.max(0, 4 - referenceImages.length)
+                      const slots = Math.max(0, MAX_REFERENCE_IMAGES - referenceImages.length)
                       const selectedFiles = files.slice(0, slots)
                       const loaded = await Promise.all(
                         selectedFiles.map(
@@ -194,7 +227,7 @@ export default function Home() {
                 </div>
 
                 {referenceImages.length ? (
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-5 gap-2">
                     {referenceImages.map((img) => (
                       <div key={img.id} className="group relative overflow-hidden rounded-xl border border-white/10">
                         <img src={img.dataUrl} alt={img.name} className="aspect-square w-full object-cover" />
@@ -250,6 +283,7 @@ export default function Home() {
                     }))
                     replaceWorkspaceRun(runId, next)
                     upsertItems(next)
+                    void ensureNamingReady(next)
                   } catch {
                     const stopped = controller.signal.aborted
                     const failed: Item[] = normalized.map((prompt, idx) => ({
@@ -323,14 +357,6 @@ export default function Home() {
                     const zip = new JSZip()
                     const ts = new Date()
                     const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(ts.getHours()).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}`
-                    const namingRes = await generateNaming({
-                      items: selectedSucceeded.map((it) => ({
-                        id: it.id,
-                        prompt: it.prompt,
-                        imageUrl: it.proxyUrl || it.imageUrl,
-                      })),
-                    }).catch(() => ({ items: [] as { id: string; industry: string; style: string; color: string }[] }))
-                    const namingMap = new Map(namingRes.items.map((i) => [i.id, i]))
 
                     await Promise.all(
                       selectedSucceeded.map(async (it, idx) => {
@@ -339,7 +365,7 @@ export default function Home() {
                         const res = await fetch(url)
                         const blob = await res.blob()
                         const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'bin'
-                        const tags = namingMap.get(it.id)
+                        const tags = it.namingTags as NamingTag | undefined
                         const filename = tags
                           ? buildCoverFilenameByTags(tags, idx + 1, ext)
                           : buildCoverFilename(it.prompt, idx + 1, ext)

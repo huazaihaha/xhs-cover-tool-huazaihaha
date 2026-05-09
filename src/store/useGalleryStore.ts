@@ -5,10 +5,12 @@ import type { GenerateResultItem } from '../../shared/types'
 type StoredItem = GenerateResultItem & {
   proxyUrl?: string
   editedUrl?: string
+  namingTags?: { industry?: string; style?: string; color?: string }
 }
 
 type WorkspaceItem = GenerateResultItem & {
   proxyUrl?: string
+  namingTags?: { industry?: string; style?: string; color?: string }
 }
 
 type GalleryState = {
@@ -19,6 +21,9 @@ type GalleryState = {
   appendWorkspaceItems: (items: WorkspaceItem[]) => void
   replaceWorkspaceRun: (runId: string, items: WorkspaceItem[]) => void
   setWorkspaceBusy: (busy: boolean) => void
+  setNamingTags: (
+    updates: Array<{ id: string; namingTags: { industry?: string; style?: string; color?: string } }>,
+  ) => void
   setEditedUrl: (id: string, editedUrl: string) => void
   removeItems: (ids: string[]) => void
   clear: () => void
@@ -73,6 +78,21 @@ export const useGalleryStore = create<GalleryState>()(
           }
         }),
       setWorkspaceBusy: (workspaceBusy) => set({ workspaceBusy }),
+      setNamingTags: (updates) =>
+        set((state) => {
+          if (!updates.length) return state
+          const map = new Map(updates.map((u) => [u.id, u.namingTags]))
+          return {
+            items: state.items.map((i) => {
+              const namingTags = map.get(i.id)
+              return namingTags ? { ...i, namingTags } : i
+            }),
+            workspaceItems: state.workspaceItems.map((i) => {
+              const namingTags = map.get(i.id)
+              return namingTags ? { ...i, namingTags } : i
+            }),
+          }
+        }),
       setEditedUrl: (id, editedUrl) =>
         set((state) => ({
           items: state.items.map((i) => (i.id === id ? { ...i, editedUrl } : i)),
@@ -84,7 +104,7 @@ export const useGalleryStore = create<GalleryState>()(
     {
       name: 'xhs-cover-gallery',
       partialize: (state) => ({
-        items: state.items.map(({ id, prompt, model, status, imageUrl, createdAt, proxyUrl, editedUrl }) => ({
+        items: state.items.map(({ id, prompt, model, status, imageUrl, createdAt, proxyUrl, editedUrl, namingTags }) => ({
           id,
           prompt,
           model,
@@ -93,8 +113,9 @@ export const useGalleryStore = create<GalleryState>()(
           createdAt,
           proxyUrl,
           editedUrl,
+          namingTags,
         })),
-        workspaceItems: state.workspaceItems.map(({ id, prompt, model, status, imageUrl, createdAt, proxyUrl }) => ({
+        workspaceItems: state.workspaceItems.map(({ id, prompt, model, status, imageUrl, createdAt, proxyUrl, namingTags }) => ({
           id,
           prompt,
           model,
@@ -102,6 +123,7 @@ export const useGalleryStore = create<GalleryState>()(
           imageUrl,
           createdAt,
           proxyUrl,
+          namingTags,
         })),
         workspaceBusy: state.workspaceBusy,
       }),

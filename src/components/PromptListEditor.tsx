@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { CopyPlus, Plus, Trash2 } from 'lucide-react'
+import { CheckSquare, CopyPlus, Plus, Square, Trash2 } from 'lucide-react'
 
 type Props = {
   prompts: string[]
@@ -9,6 +9,7 @@ type Props = {
 
 export default function PromptListEditor({ prompts, onChange }: Props) {
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({})
+  const [selected, setSelected] = useState<Record<number, boolean>>({})
 
   const resize = (idx: number) => {
     const el = textareaRefs.current[idx]
@@ -21,6 +22,21 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
     prompts.forEach((_, idx) => resize(idx))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prompts.length])
+
+  useEffect(() => {
+    setSelected((prev) => {
+      const next: Record<number, boolean> = {}
+      for (let i = 0; i < prompts.length; i += 1) {
+        if (prev[i]) next[i] = true
+      }
+      return next
+    })
+  }, [prompts.length])
+
+  const selectedCount = useMemo(
+    () => prompts.reduce((acc, _, idx) => (selected[idx] ? acc + 1 : acc), 0),
+    [prompts, selected],
+  )
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -38,6 +54,43 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
           新增
         </button>
       </div>
+      <div className="mb-2 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            if (selectedCount === prompts.length) {
+              setSelected({})
+              return
+            }
+            const next: Record<number, boolean> = {}
+            for (let i = 0; i < prompts.length; i += 1) next[i] = true
+            setSelected(next)
+          }}
+          className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-zinc-300 transition hover:bg-white/10 hover:text-zinc-50"
+        >
+          {selectedCount === prompts.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+          全选
+        </button>
+        <button
+          type="button"
+          disabled={!selectedCount}
+          onClick={() => {
+            if (!selectedCount) return
+            const next = prompts.filter((_, idx) => !selected[idx])
+            onChange(next.length ? next : [''])
+            setSelected({})
+          }}
+          className={cn(
+            'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] transition',
+            selectedCount
+              ? 'bg-rose-500/15 text-rose-200 hover:bg-rose-500/25'
+              : 'cursor-not-allowed bg-white/5 text-zinc-600',
+          )}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          批量删除（{selectedCount}）
+        </button>
+      </div>
 
       <div className="grid gap-2">
         {prompts.map((value, idx) => (
@@ -48,6 +101,17 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
             <div className="flex w-8 items-center justify-center text-xs text-zinc-500">
               {idx + 1}
             </div>
+            <button
+              type="button"
+              onClick={() => setSelected((s) => ({ ...s, [idx]: !s[idx] }))}
+              className={cn(
+                'inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-300 transition',
+                selected[idx] ? 'bg-emerald-400/20 text-emerald-200' : 'hover:bg-white/5 hover:text-zinc-50',
+              )}
+              aria-label="选择提示词"
+            >
+              {selected[idx] ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            </button>
             <textarea
               ref={(el) => {
                 textareaRefs.current[idx] = el

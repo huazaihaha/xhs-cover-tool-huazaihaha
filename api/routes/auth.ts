@@ -39,14 +39,20 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
     return
   }
 
-  const { code } = await createVerifyCode(email, purpose)
-  const delivery = await sendCodeEmail(email, code)
-  const allowEcho = process.env.AUTH_DEV_ECHO_CODE === 'true'
-  res.status(200).json({
-    success: true,
-    delivery: delivery.delivery,
-    ...(allowEcho ? { debugCode: code } : {}),
-  })
+  try {
+    const { code } = await createVerifyCode(email, purpose)
+    const delivery = await sendCodeEmail(email, code)
+    const devEchoEnabled = process.env.AUTH_DEV_ECHO_CODE === 'true'
+    const isNonProd = process.env.NODE_ENV !== 'production'
+    const allowEcho = devEchoEnabled || (isNonProd && delivery.delivery === 'mock')
+    res.status(200).json({
+      success: true,
+      delivery: delivery.delivery,
+      ...(allowEcho ? { debugCode: code } : {}),
+    })
+  } catch {
+    res.status(500).json({ success: false, error: '验证码发送失败，请稍后重试' })
+  }
 })
 
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
