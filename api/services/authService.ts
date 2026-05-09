@@ -174,6 +174,9 @@ export async function sendCodeEmail(email: string, code: string) {
   const smtpPort = Number(process.env.AUTH_SMTP_PORT || 0)
   const smtpUser = process.env.AUTH_SMTP_USER
   const smtpPass = process.env.AUTH_SMTP_PASS
+  const connectTimeout = Number(process.env.AUTH_SMTP_CONNECT_TIMEOUT_MS || 10000)
+  const greetingTimeout = Number(process.env.AUTH_SMTP_GREETING_TIMEOUT_MS || 10000)
+  const socketTimeout = Number(process.env.AUTH_SMTP_SOCKET_TIMEOUT_MS || 15000)
   if (!from || !smtpHost || !smtpPort || !smtpUser || !smtpPass) {
     console.log(`[Auth Mock Email] to=${email} code=${code}`)
     return { delivery: 'mock' as const }
@@ -185,14 +188,37 @@ export async function sendCodeEmail(email: string, code: string) {
     port: smtpPort,
     secure: smtpPort === 465,
     auth: { user: smtpUser, pass: smtpPass },
+    connectionTimeout: connectTimeout,
+    greetingTimeout,
+    socketTimeout,
   })
 
-  await transporter.sendMail({
-    from,
-    to: email,
-    subject: '登录验证码',
-    text: `你的验证码是：${code}，10分钟内有效。`,
-  })
-  return { delivery: 'smtp' as const }
+  try {
+    const info = await transporter.sendMail({
+      from,
+      to: email,
+      subject: '登录验证码',
+      text: `你的验证码是：${code}，10分钟内有效。`,
+    })
+    console.log(
+      `[Auth SMTP] sent to=${email} host=${smtpHost} port=${smtpPort} secure=${smtpPort === 465} messageId=${info.messageId || 'n/a'}`,
+    )
+    return { delivery: 'smtp' as const }
+  } catch (err) {
+    const e = err as {
+      code?: string
+      message?: string
+      command?: string
+      responseCode?: number
+      response?: string
+      errno?: string
+      syscall?: string
+      address?: string
+      port?: number
+    }
+    console.error(
+      `[Auth SMTP] failed to=${email} host=${smtpHost} port=${smtpPort} secure=${smtpPort === 465} code=${e.code || 'n/a'} responseCode=${e.responseCode || 'n/a'} command=${e.command || 'n/a'} errno=${e.errno || 'n/a'} syscall=${e.syscall || 'n/a'} message=${e.message || 'unknown'}`,
+    )
+    throw err
+  }
 }
-

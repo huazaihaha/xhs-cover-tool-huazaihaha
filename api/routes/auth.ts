@@ -50,7 +50,9 @@ router.post('/send-code', async (req: Request, res: Response): Promise<void> => 
       delivery: delivery.delivery,
       ...(allowEcho ? { debugCode: code } : {}),
     })
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[Auth] send-code failed email=${email} purpose=${purpose} error=${msg}`)
     res.status(500).json({ success: false, error: '验证码发送失败，请稍后重试' })
   }
 })
