@@ -9,6 +9,8 @@ type AuthUser = {
 type AuthState = {
   token: string
   user: AuthUser | null
+  loginCount: number
+  firstLoginAt: string
   hydrated: boolean
   setAuth: (token: string, user: AuthUser) => void
   clearAuth: () => void
@@ -20,8 +22,16 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       token: '',
       user: null,
+      loginCount: 0,
+      firstLoginAt: '',
       hydrated: false,
-      setAuth: (token, user) => set({ token, user }),
+      setAuth: (token, user) =>
+        set((state) => ({
+          token,
+          user,
+          loginCount: state.loginCount + 1,
+          firstLoginAt: state.firstLoginAt || new Date().toISOString(),
+        })),
       clearAuth: () => set({ token: '', user: null }),
       setHydrated: (hydrated) => set({ hydrated }),
     }),
@@ -30,6 +40,8 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         token: state.token,
         user: state.user,
+        loginCount: state.loginCount,
+        firstLoginAt: state.firstLoginAt,
       }),
       onRehydrateStorage: () => (state) => {
         state?.setHydrated(true)
@@ -37,4 +49,3 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 )
-

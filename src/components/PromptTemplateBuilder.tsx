@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Braces, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Plus, Sparkles, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type TemplateParam = {
@@ -20,14 +20,14 @@ type Props = {
 const STORAGE_KEY = 'xhs-cover-template-builder-v1'
 
 function extractPlaceholders(template: string) {
-  const regex = /{{\s*([^{}]+?)\s*}}/g
+  const regex = /(?:{{\s*([^{}]+?)\s*}}|【\s*([^【】]+?)\s*】)/g
   const names: string[] = []
   const seen = new Set<string>()
   let matched: RegExpExecArray | null = null
   while (true) {
     matched = regex.exec(template)
     if (!matched) break
-    const name = matched[1].trim()
+    const name = (matched[1] || matched[2] || '').trim()
     if (!name || seen.has(name)) continue
     seen.add(name)
     names.push(name)
@@ -36,7 +36,8 @@ function extractPlaceholders(template: string) {
 }
 
 function renderTemplate(template: string, mapping: Record<string, string>) {
-  return template.replace(/{{\s*([^{}]+?)\s*}}/g, (_, raw: string) => {
+  return template.replace(/(?:{{\s*([^{}]+?)\s*}}|【\s*([^【】]+?)\s*】)/g, (_, rawA: string, rawB: string) => {
+    const raw = rawA || rawB
     const key = raw.trim()
     return Object.prototype.hasOwnProperty.call(mapping, key) ? mapping[key] : ''
   })
@@ -97,11 +98,11 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
   const placeholders = useMemo(() => extractPlaceholders(template), [template])
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="max-h-[76vh] overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900/95 p-4">
+      <div className="mb-4 flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold text-zinc-50">提示词模版工厂</div>
-          <div className="text-xs text-zinc-400">占位符写法：{'{{参数名}}'}，参数值按换行输入</div>
+          <div className="text-sm font-semibold text-zinc-50">批量设置提示词</div>
+          <div className="text-xs text-zinc-400">参数名请用中文方头括号包裹，参数值按行填写</div>
         </div>
         <button
           type="button"
@@ -111,7 +112,7 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
               { id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`, name: '', valuesText: '' },
             ])
           }
-          className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-zinc-200 transition hover:bg-white/15 hover:text-zinc-50"
+          className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-200 transition hover:bg-white/10 hover:text-zinc-50"
         >
           <Plus className="h-4 w-4" />
           新增参数
@@ -124,12 +125,11 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
           value={template}
           onChange={(e) => setTemplate(e.target.value)}
           rows={4}
-          placeholder="例：帮我生成{{行业}}赛道的{{风格}}风格小红书封面，主色调{{颜色}}"
+          placeholder="例：帮我生成【行业】赛道的【风格】风格小红书封面，主色调【颜色】"
           className="w-full resize-y rounded-lg bg-black/30 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600"
         />
-        <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
-          <Braces className="h-3.5 w-3.5" />
-          检测到占位符：{placeholders.length ? placeholders.join('、') : '无'}
+        <div className="mt-2 text-[11px] text-zinc-500">
+          检测到参数：{placeholders.length ? placeholders.join('、') : '无'}
         </div>
         <div className="mt-2 flex justify-end">
           <button
@@ -137,7 +137,7 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
             onClick={() => {
               const detected = extractPlaceholders(template)
               if (!detected.length) {
-                setMessage('未识别到占位符，请先在模版中使用 {{参数名}}')
+                setMessage('未识别到参数，请先在模版中填写参数标记')
                 return
               }
               setParams((prev) => {
@@ -163,7 +163,7 @@ export default function PromptTemplateBuilder({ onGenerate }: Props) {
             }}
             className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-400/25"
           >
-            <Braces className="h-4 w-4" />
+            <Sparkles className="h-4 w-4" />
             识别参数
           </button>
         </div>

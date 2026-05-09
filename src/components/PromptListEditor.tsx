@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { CheckSquare, CopyPlus, Plus, Square, Trash2 } from 'lucide-react'
+import { CheckSquare, ChevronDown, CopyPlus, Plus, Sparkles, Square, Trash2 } from 'lucide-react'
 
 type Props = {
   prompts: string[]
   onChange: (prompts: string[]) => void
+  onOpenTemplateBuilder: () => void
 }
 
-export default function PromptListEditor({ prompts, onChange }: Props) {
+export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuilder }: Props) {
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({})
   const [selected, setSelected] = useState<Record<number, boolean>>({})
+  const [expanded, setExpanded] = useState(false)
 
   const resize = (idx: number) => {
     const el = textareaRefs.current[idx]
@@ -37,18 +39,28 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
     () => prompts.reduce((acc, _, idx) => (selected[idx] ? acc + 1 : acc), 0),
     [prompts, selected],
   )
+  const visiblePrompts = expanded ? prompts : prompts.slice(0, 5)
+  const hiddenCount = Math.max(0, prompts.length - 5)
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+    <div className="space-y-3">
+      <button
+        type="button"
+        onClick={onOpenTemplateBuilder}
+        className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-200"
+      >
+        <Sparkles className="h-4 w-4" />
+        批量设置提示词
+      </button>
+
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <div className="text-sm font-semibold text-zinc-50">提示词</div>
-          <div className="text-xs text-zinc-400">支持无限条，点击右侧按钮快速复制上一条再微调</div>
+          <div className="text-sm font-semibold text-emerald-200">提示词</div>
         </div>
         <button
           type="button"
           onClick={() => onChange([...prompts, ''])}
-          className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1.5 text-xs text-emerald-200 transition hover:bg-emerald-400/25"
+          className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-white/15"
         >
           <Plus className="h-4 w-4" />
           新增
@@ -66,7 +78,7 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
             for (let i = 0; i < prompts.length; i += 1) next[i] = true
             setSelected(next)
           }}
-          className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-zinc-300 transition hover:bg-white/10 hover:text-zinc-50"
+          className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-zinc-100 transition hover:bg-white/10 hover:text-zinc-50"
         >
           {selectedCount === prompts.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
           全选
@@ -83,7 +95,7 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
           className={cn(
             'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] transition',
             selectedCount
-              ? 'bg-rose-500/15 text-rose-200 hover:bg-rose-500/25'
+              ? 'bg-rose-500/15 text-rose-100 hover:bg-rose-500/25'
               : 'cursor-not-allowed bg-white/5 text-zinc-600',
           )}
         >
@@ -93,12 +105,12 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
       </div>
 
       <div className="grid gap-2">
-        {prompts.map((value, idx) => (
+        {visiblePrompts.map((value, idx) => (
           <div
             key={idx}
             className="group flex items-stretch gap-2 rounded-xl border border-white/10 bg-zinc-950/40 p-2"
           >
-            <div className="flex w-8 items-center justify-center text-xs text-zinc-500">
+            <div className="flex w-8 items-center justify-center text-xs text-zinc-100">
               {idx + 1}
             </div>
             <button
@@ -143,9 +155,9 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
                   onChange(next)
                 }}
                 className={cn(
-                  'inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-300 transition',
+                  'inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-100 transition',
                   'hover:bg-white/5 hover:text-zinc-50',
-                  idx === 0 ? 'opacity-30 hover:bg-transparent hover:text-zinc-300' : '',
+                  idx === 0 ? 'opacity-30 hover:bg-transparent hover:text-zinc-100' : '',
                 )}
                 aria-label="复制上一条"
               >
@@ -157,7 +169,7 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
                   const next = prompts.filter((_, i) => i !== idx)
                   onChange(next.length ? next : [''])
                 }}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-100 transition hover:bg-white/5 hover:text-zinc-50"
                 aria-label="删除"
               >
                 <Trash2 className="h-4 w-4" />
@@ -167,12 +179,23 @@ export default function PromptListEditor({ prompts, onChange }: Props) {
         ))}
       </div>
 
-      <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+      {hiddenCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-semibold text-yellow-300 transition hover:bg-white/5 hover:text-yellow-200"
+        >
+          <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', expanded ? 'rotate-180' : 'rotate-0')} />
+          {expanded ? '收起多余提示词' : `展开剩余 ${hiddenCount} 条提示词`}
+        </button>
+      ) : null}
+
+      <div className="mt-3 flex items-center justify-between text-xs text-zinc-100">
         <div>已输入 {prompts.filter((p) => p.trim()).length} 条</div>
         <button
           type="button"
           onClick={() => onChange([''])}
-          className="rounded-full px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
+          className="rounded-full px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-white/5 hover:text-zinc-50"
         >
           清空
         </button>

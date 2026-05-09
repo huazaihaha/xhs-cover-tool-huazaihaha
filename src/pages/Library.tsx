@@ -41,7 +41,6 @@ function downloadBlob(blob: Blob, filename: string) {
 export default function Library() {
   const items = useGalleryStore((s) => s.items)
   const removeItems = useGalleryStore((s) => s.removeItems)
-  const clear = useGalleryStore((s) => s.clear)
 
   const [selected, setSelected] = useState<Record<string, boolean>>({})
 
@@ -71,6 +70,14 @@ export default function Library() {
     })
   }, [items])
   const latestBatch = groupedBatches[0]
+  const allItemsSelected = useMemo(
+    () => !!items.length && items.every((i) => selected[i.id]),
+    [items, selected],
+  )
+  const latestBatchAllSelected = useMemo(
+    () => !!latestBatch?.items.length && latestBatch.items.every((i) => selected[i.id]),
+    [latestBatch, selected],
+  )
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -78,17 +85,23 @@ export default function Library() {
       <div className="mx-auto max-w-6xl px-6 py-6">
         <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <div className="text-sm font-semibold text-zinc-50">图库</div>
-            <div className="text-xs text-zinc-400">这里保存你生成过与编辑过的封面（本地浏览器存储）</div>
+            <div className="text-lg font-semibold text-emerald-200">图库</div>
+            <div className="text-sm text-zinc-400">温馨提醒！图片保存在本地浏览器，暂未保存云端。</div>
           </div>
 
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
-                const next: Record<string, boolean> = {}
-                for (const it of items) next[it.id] = true
-                setSelected(next)
+                setSelected((prev) => {
+                  const next = { ...prev }
+                  if (allItemsSelected) {
+                    for (const it of items) delete next[it.id]
+                    return next
+                  }
+                  for (const it of items) next[it.id] = true
+                  return next
+                })
               }}
               disabled={!items.length}
               className={cn(
@@ -98,15 +111,21 @@ export default function Library() {
                   : 'cursor-not-allowed bg-white/5 text-zinc-600',
               )}
             >
-              全选
+              {allItemsSelected ? '取消全选' : '全选'}
             </button>
             <button
               type="button"
               onClick={() => {
                 if (!latestBatch) return
-                const next: Record<string, boolean> = {}
-                for (const it of latestBatch.items) next[it.id] = true
-                setSelected(next)
+                setSelected((prev) => {
+                  const next = { ...prev }
+                  if (latestBatchAllSelected) {
+                    for (const it of latestBatch.items) delete next[it.id]
+                    return next
+                  }
+                  for (const it of latestBatch.items) next[it.id] = true
+                  return next
+                })
               }}
               disabled={!latestBatch}
               className={cn(
@@ -116,7 +135,7 @@ export default function Library() {
                   : 'cursor-not-allowed bg-white/5 text-zinc-600',
               )}
             >
-              选择当前批次
+              {latestBatchAllSelected ? '取消最近批次' : '选择最近批次'}
             </button>
             <button
               type="button"
@@ -178,22 +197,6 @@ export default function Library() {
               <Trash2 className="h-4 w-4" />
               删除
             </button>
-            <button
-              type="button"
-              disabled={!items.length}
-              onClick={() => {
-                clear()
-                setSelected({})
-              }}
-              className={cn(
-                'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition',
-                items.length
-                  ? 'bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-zinc-50'
-                  : 'cursor-not-allowed bg-white/5 text-zinc-600',
-              )}
-            >
-              清空图库
-            </button>
           </div>
         </div>
 
@@ -209,17 +212,28 @@ export default function Library() {
                   <div className="text-xs text-zinc-400">
                     批次 {groupedBatches.length - batchIdx} · {batch.label} · {batch.items.length} 张
                   </div>
+                  {(() => {
+                    const batchAllSelected = batch.items.length > 0 && batch.items.every((it) => selected[it.id])
+                    return (
                   <button
                     type="button"
                     onClick={() => {
-                      const next: Record<string, boolean> = {}
-                      for (const it of batch.items) next[it.id] = true
-                      setSelected(next)
+                      setSelected((prev) => {
+                        const next = { ...prev }
+                        if (batchAllSelected) {
+                          for (const it of batch.items) delete next[it.id]
+                          return next
+                        }
+                        for (const it of batch.items) next[it.id] = true
+                        return next
+                      })
                     }}
                     className="rounded-full bg-white/10 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-white/15"
                   >
-                    选择本批次
+                    {batchAllSelected ? '取消本批次' : '选择本批次'}
                   </button>
+                    )
+                  })()}
                 </div>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   {batch.items.map((it) => {

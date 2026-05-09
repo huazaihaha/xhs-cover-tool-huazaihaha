@@ -40,7 +40,7 @@ export default function App() {
     <Router>
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
-        <Route path="/" element={<Protected><Home /></Protected>} />
+        <Route path="/" element={<Home />} />
         <Route path="/editor/:id" element={<Protected><Editor /></Protected>} />
         <Route path="/library" element={<Protected><Library /></Protected>} />
         <Route path="/settings" element={<Protected><Settings /></Protected>} />

@@ -10,6 +10,7 @@ import { generateImages, generateNaming } from '@/utils/api'
 import { buildCoverFilename, buildCoverFilenameByTags } from '@/utils/filename'
 import type { GenerateResultItem, ModelName } from '../../shared/types'
 import { useGalleryStore } from '@/store/useGalleryStore'
+import { useAuthStore } from '@/store/useAuthStore'
 import { Download, Loader2, Sparkles, Square, Upload, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -43,6 +44,7 @@ function downloadBlob(blob: Blob, filename: string) {
 
 export default function Home() {
   const navigate = useNavigate()
+  const token = useAuthStore((s) => s.token)
   const upsertItems = useGalleryStore((s) => s.upsertItems)
   const items = useGalleryStore((s) => s.workspaceItems)
   const busy = useGalleryStore((s) => s.workspaceBusy)
@@ -55,6 +57,7 @@ export default function Home() {
   const [model, setModel] = useState<ModelName>('image2')
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([])
+  const [templateModalOpen, setTemplateModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const activeRunRef = useRef<{ runId: string; controller: AbortController } | null>(null)
   const namingInFlightRef = useRef(false)
@@ -67,6 +70,10 @@ export default function Home() {
     () => succeeded.filter((i) => selected[i.id]),
     [succeeded, selected],
   )
+  const allSucceededSelected = useMemo(
+    () => !!succeeded.length && succeeded.every((i) => selected[i.id]),
+    [succeeded, selected],
+  )
   const failedItems = useMemo(
     () => items.filter((i) => i.status === 'failed'),
     [items],
@@ -77,6 +84,11 @@ export default function Home() {
   )
 
   const canGenerate = prompts.some((p) => p.trim()) && !busy
+  const requireAuth = () => {
+    if (token) return true
+    navigate('/auth')
+    return false
+  }
 
   const ensureNamingReady = async (list: Item[]) => {
     const targets = list.filter(
@@ -149,32 +161,37 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_8%_-10%,rgba(16,185,129,0.15),transparent_60%),radial-gradient(50rem_26rem_at_92%_0%,rgba(59,130,246,0.13),transparent_60%)]" />
       <TopNav />
-      <div className="mx-auto grid max-w-6xl gap-6 px-6 py-6 lg:grid-cols-[420px_1fr]">
-        <div className="space-y-4">
-          <PromptTemplateBuilder
-            onGenerate={(generatedPrompts) => {
-              setPrompts((prev) => [...prev, ...generatedPrompts])
-            }}
+      <div className="mx-auto grid max-w-7xl gap-6 px-6 py-6 lg:grid-cols-[340px_1fr]">
+        <aside
+          className="space-y-4 lg:sticky lg:top-24 lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto lg:border-r lg:border-white/10 lg:pr-4 lg:[&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          <PromptListEditor
+            prompts={prompts}
+            onChange={setPrompts}
+            onOpenTemplateBuilder={() => setTemplateModalOpen(true)}
           />
-          <PromptListEditor prompts={prompts} onChange={setPrompts} />
+          <div className="h-px bg-white/10" />
           <ModelSelector value={model} onChange={setModel} />
-
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-            <div className="flex flex-col gap-3">
-              <div className="rounded-2xl border border-white/10 bg-zinc-950/30 p-3">
+          <div className="h-px bg-white/10" />
+          <div className="rounded-2xl bg-zinc-950/25 p-1">
                 <div className="mb-2 flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-semibold text-zinc-200">参考图</div>
-                    <div className="text-[11px] text-zinc-500">最多 10 张，单张建议不超过 4MB</div>
+                    <div className="text-sm font-semibold text-emerald-200">参考图</div>
+                    <div className="text-[11px] text-zinc-100">最多 10 张，单张建议不超过 4MB</div>
                   </div>
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => {
+                      if (!requireAuth()) return
+                      fileInputRef.current?.click()
+                    }}
                     className={cn(
                       'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition',
                       referenceImages.length < MAX_REFERENCE_IMAGES
-                        ? 'bg-white/10 text-zinc-200 hover:bg-white/15 hover:text-zinc-50'
+                        ? 'bg-white/10 text-zinc-100 hover:bg-white/15 hover:text-zinc-50'
                         : 'cursor-not-allowed bg-white/5 text-zinc-600',
                     )}
                     disabled={referenceImages.length >= MAX_REFERENCE_IMAGES}
@@ -243,14 +260,17 @@ export default function Home() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-[11px] text-zinc-600">未上传参考图</div>
+                  <div className="text-[11px] text-zinc-100">未上传参考图</div>
                 )}
               </div>
 
-              <button
+          <div className="h-px bg-white/10" />
+
+          <button
                 type="button"
                 disabled={!canGenerate}
                 onClick={async () => {
+                  if (!requireAuth()) return
                   const normalized = prompts
                     .map((p) => p.trim())
                     .filter(Boolean)
@@ -302,7 +322,7 @@ export default function Home() {
                   }
                 }}
                 className={cn(
-                  'inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition',
+                  'inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition',
                   canGenerate
                     ? 'bg-emerald-300 text-zinc-950 hover:bg-emerald-200'
                     : 'cursor-not-allowed bg-white/10 text-zinc-500',
@@ -311,7 +331,7 @@ export default function Home() {
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 批量生成
               </button>
-              <button
+          <button
                 type="button"
                 disabled={!busy}
                 onClick={() => {
@@ -339,7 +359,7 @@ export default function Home() {
                   setWorkspaceBusy(false)
                 }}
                 className={cn(
-                  'inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition',
+                  'inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition',
                   busy
                     ? 'bg-rose-500/15 text-rose-200 hover:bg-rose-500/25'
                     : 'cursor-not-allowed bg-white/5 text-zinc-600',
@@ -349,11 +369,11 @@ export default function Home() {
                 停止生成
               </button>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={!selectedSucceeded.length}
-                  onClick={async () => {
+          <button
+                type="button"
+                disabled={!selectedSucceeded.length}
+                onClick={async () => {
+                    if (!requireAuth()) return
                     const zip = new JSZip()
                     const ts = new Date()
                     const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(ts.getHours()).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}`
@@ -376,62 +396,51 @@ export default function Home() {
                     const zipped = await zip.generateAsync({ type: 'blob' })
                     downloadBlob(zipped, `covers_${stamp}.zip`)
                   }}
-                  className={cn(
-                    'inline-flex flex-1 items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition',
-                    selectedSucceeded.length
-                      ? 'bg-white/10 text-zinc-50 hover:bg-white/15'
-                      : 'cursor-not-allowed bg-white/5 text-zinc-600',
-                  )}
-                >
-                  <Download className="h-4 w-4" />
-                  批量下载（{selectedSucceeded.length}）
-                </button>
+                className={cn(
+                  'inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition',
+                  selectedSucceeded.length
+                    ? 'bg-white/10 text-zinc-50 hover:bg-white/15'
+                    : 'cursor-not-allowed bg-white/5 text-zinc-600',
+                )}
+              >
+                <Download className="h-4 w-4" />
+                批量下载（{selectedSucceeded.length}）
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => setSelected({})}
-                  className="inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-zinc-50"
-                  aria-label="清空选择"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <div className="text-xs text-zinc-500">
-                下载通过 zip 打包；编辑与历史可在「图库」查看；可配合参考图进行生图
-              </div>
-            </div>
-          </div>
-        </div>
+        </aside>
 
         <div className="space-y-4">
-          <div className="flex items-end justify-between">
-            <div>
-              <div className="text-sm font-semibold text-zinc-50">结果</div>
-              <div className="text-xs text-zinc-400">
-                点击卡片右下角进入编辑器；勾选后可批量下载
-              </div>
+          <div className="flex items-center justify-end gap-2">
+            <div className="rounded-full bg-white/5 px-3 py-1.5 text-[11px] text-zinc-400">
+              已选 {selectedSucceeded.length} 项
             </div>
             <button
               type="button"
               onClick={() => {
-                const next: Record<string, boolean> = {}
-                for (const it of succeeded) next[it.id] = true
-                setSelected(next)
+                setSelected((prev) => {
+                  const next = { ...prev }
+                  if (allSucceededSelected) {
+                    for (const it of succeeded) delete next[it.id]
+                    return next
+                  }
+                  for (const it of succeeded) next[it.id] = true
+                  return next
+                })
               }}
               className={cn(
-                'rounded-full px-3 py-1.5 text-xs transition',
+                'rounded-full border border-white/10 px-3 py-1.5 text-xs transition',
                 succeeded.length
-                  ? 'bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-zinc-50'
-                  : 'cursor-not-allowed bg-white/5 text-zinc-600',
+                  ? 'bg-white/5 text-zinc-100 hover:bg-white/10 hover:text-zinc-50'
+                  : 'cursor-not-allowed bg-transparent text-zinc-600',
               )}
               disabled={!succeeded.length}
             >
-              全选完成项
+              {allSucceededSelected ? '取消全选' : '全选'}
             </button>
             <button
               type="button"
               onClick={async () => {
+                if (!requireAuth()) return
                 if (busy || !failedItems.length) return
                 setWorkspaceBusy(true)
                 try {
@@ -441,14 +450,14 @@ export default function Home() {
                 }
               }}
               className={cn(
-                'rounded-full px-3 py-1.5 text-xs transition',
+                'rounded-full border border-white/10 px-3 py-1.5 text-xs transition',
                 failedItems.length && !busy
-                  ? 'bg-amber-400/15 text-amber-200 hover:bg-amber-400/25'
-                  : 'cursor-not-allowed bg-white/5 text-zinc-600',
+                  ? 'bg-white/5 text-zinc-100 hover:bg-white/10 hover:text-zinc-50'
+                  : 'cursor-not-allowed bg-transparent text-zinc-600',
               )}
               disabled={!failedItems.length || busy}
             >
-              一键重试失败项（{failedItems.length}）
+              一键重试
             </button>
           </div>
 
@@ -458,6 +467,7 @@ export default function Home() {
             onToggle={(id) => setSelected((s) => ({ ...s, [id]: !s[id] }))}
             onOpen={(id) => navigate(`/editor/${id}`)}
             onRetry={async (id) => {
+              if (!requireAuth()) return
               if (busy) return
               const target = items.find((it) => it.id === id)
               if (!target || target.status !== 'failed') return
@@ -478,6 +488,30 @@ export default function Home() {
           />
         </div>
       </div>
+
+      {templateModalOpen ? (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl rounded-3xl border border-white/10 bg-zinc-900/95 p-4 shadow-2xl">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="text-sm font-semibold text-zinc-50">批量设置提示词</div>
+              <button
+                type="button"
+                onClick={() => setTemplateModalOpen(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-zinc-50"
+                aria-label="关闭弹窗"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <PromptTemplateBuilder
+              onGenerate={(generatedPrompts) => {
+                setPrompts((prev) => [...prev, ...generatedPrompts])
+                setTemplateModalOpen(false)
+              }}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

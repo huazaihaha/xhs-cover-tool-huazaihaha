@@ -13,17 +13,18 @@ const items = [
 export default function TopNav() {
   const location = useLocation()
   const token = useAuthStore((s) => s.token)
-  const user = useAuthStore((s) => s.user)
   const clearAuth = useAuthStore((s) => s.clearAuth)
 
   return (
     <div className="sticky top-0 z-20 border-b border-white/10 bg-zinc-950/70 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <div className="flex items-baseline gap-3">
-          <div className="text-sm font-semibold tracking-[0.24em] text-zinc-100">
-            COVER FORGE
+      <div className="flex w-full items-center justify-between px-6 py-4">
+        <div>
+          <div
+            className="text-3xl font-extrabold leading-none tracking-[0.04em] text-white"
+            style={{ fontFamily: '"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif' }}
+          >
+            点赞AI -批量生图版
           </div>
-          <div className="text-xs text-zinc-400">小红书封面批量生成</div>
         </div>
         <div className="flex items-center gap-2">
           {items.map((it) => {
@@ -37,7 +38,7 @@ export default function TopNav() {
                 key={it.to}
                 to={it.to}
                 className={cn(
-                  'flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition',
+                  'flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold transition',
                   active
                     ? 'bg-white/10 text-zinc-50'
                     : 'text-zinc-300 hover:bg-white/5 hover:text-zinc-50',
@@ -48,20 +49,26 @@ export default function TopNav() {
               </Link>
             )
           })}
-          <div className="ml-2 hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-zinc-300 md:inline-flex">
-            {user?.email || '未登录'}
-          </div>
-          <button
-            type="button"
-            onClick={async () => {
-              if (token) await authLogout(token).catch(() => null)
-              clearAuth()
-            }}
-            className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
-          >
-            <LogOut className="h-4 w-4" />
-            退出
-          </button>
+          {token ? (
+            <button
+              type="button"
+              onClick={async () => {
+                await authLogout(token).catch(() => null)
+                clearAuth()
+              }}
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
+            >
+              <LogOut className="h-4 w-4" />
+              退出
+            </button>
+          ) : (
+            <Link
+              to="/auth"
+              className="inline-flex items-center gap-2 rounded-full bg-emerald-400/15 px-3 py-1.5 text-sm font-bold text-emerald-200 transition hover:bg-emerald-400/25 hover:text-emerald-100"
+            >
+              登录 / 注册
+            </Link>
+          )}
         </div>
       </div>
     </div>

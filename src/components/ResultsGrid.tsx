@@ -50,14 +50,14 @@ export default function ResultsGrid({
 }: Props) {
   if (!items.length) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-sm text-zinc-400">
+      <div className="rounded-2xl bg-white/[0.03] p-8 text-center text-sm text-zinc-400">
         生成结果会出现在这里
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
       {items.map((it) => {
         const checked = !!selected[it.id]
         const src = it.proxyUrl || it.imageUrl
@@ -65,10 +65,10 @@ export default function ResultsGrid({
           <div
             key={it.id}
             className={cn(
-              'group relative overflow-hidden rounded-2xl border bg-zinc-950/30 transition',
+              'group relative overflow-hidden rounded-2xl bg-zinc-950/25 transition',
               checked
-                ? 'border-emerald-300 bg-emerald-300/10 shadow-[0_0_0_2px_rgba(110,231,183,0.45),0_0_24px_rgba(16,185,129,0.4)]'
-                : 'border-white/10 hover:border-white/20',
+                ? 'bg-emerald-300/10 shadow-[0_0_0_1px_rgba(110,231,183,0.45),0_0_24px_rgba(16,185,129,0.35)]'
+                : 'hover:bg-zinc-900/45',
             )}
           >
             {checked ? <div className="pointer-events-none absolute inset-0 z-[1] bg-emerald-300/10" /> : null}
@@ -76,10 +76,10 @@ export default function ResultsGrid({
               type="button"
               onClick={() => onToggle(it.id)}
               className={cn(
-                'absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-xl border backdrop-blur transition',
+                'absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-xl backdrop-blur transition',
                 checked
-                  ? 'border-emerald-200 bg-emerald-300 text-zinc-950 shadow-[0_0_0_2px_rgba(16,185,129,0.45)]'
-                  : 'border-white/10 bg-zinc-950/40 text-zinc-200 hover:bg-white/5',
+                  ? 'bg-emerald-300 text-zinc-950 shadow-[0_0_0_2px_rgba(16,185,129,0.45)]'
+                  : 'bg-zinc-950/40 text-zinc-200 hover:bg-white/10',
               )}
               aria-label="选择"
             >
