@@ -21,10 +21,16 @@ type NamingTag = { industry?: string; style?: string; color?: string }
 const MAX_REFERENCE_IMAGES = 10
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
+const PUBLIC_BASE = import.meta.env.BASE_URL || '/'
 
 function withApiBase(path: string) {
   if (!API_BASE_URL) return path
   return `${API_BASE_URL}${path}`
+}
+
+function withPublicBase(path: string) {
+  const normalizedPath = path.startsWith('/') ? path.slice(1) : path
+  return `${PUBLIC_BASE}${normalizedPath}`
 }
 
 function toProxyUrl(imageUrl?: string) {
@@ -583,7 +589,7 @@ export default function Home() {
               <div className="mt-5 rounded-2xl border border-white/15 bg-white p-3">
                 {!qrBroken ? (
                   <img
-                    src={withApiBase('/wechat-qr.png')}
+                    src={withPublicBase('/wechat-qr.png')}
                     alt="三白微信二维码"
                     className="mx-auto w-full max-w-[280px] rounded-xl"
                     onError={() => setQrBroken(true)}
