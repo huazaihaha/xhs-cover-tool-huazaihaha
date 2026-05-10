@@ -2,6 +2,7 @@ import fs from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
 import { resolveAppDataDir } from './dataPath.js'
+import { hasUpstashRedis, redisCommand } from './upstashRedis.js'
 
 type VerifyPurpose = 'register' | 'login'
 
@@ -11,12 +12,6 @@ type UserRecord = {
   passwordHash: string
   passwordSalt: string
   createdAt: string
-}
-
-type SessionRecord = {
-  token: string
-  userId: string
-  expiresAt: number
 }
 
 type VerifyCodeRecord = {
@@ -33,7 +28,6 @@ type UserFileShape = {
 const dataDir = resolveAppDataDir()
 const usersFile = path.resolve(dataDir, 'users.json')
 
-const sessions = new Map<string, SessionRecord>()
 const verifyCodes = new Map<string, VerifyCodeRecord>()
 
 let usersLoaded = false
@@ -81,13 +75,72 @@ function randomToken() {
   return crypto.randomBytes(32).toString('hex')
 }
 
+function jwtSecret() {
+  return process.env.AUTH_JWT_SECRET || 'change-this-jwt-secret'
+}
+
+function toBase64Url(input: Buffer | string) {
+  const buf = typeof input === 'string' ? Buffer.from(input, 'utf8') : input
+  return buf.toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+}
+
+function signJwt(payload: Record<string, unknown>) {
+  const header = { alg: 'HS256', typ: 'JWT' }
+  const headerPart = toBase64Url(JSON.stringify(header))
+  const payloadPart = toBase64Url(JSON.stringify(payload))
+  const raw = `${headerPart}.${payloadPart}`
+  const sig = crypto.createHmac('sha256', jwtSecret()).update(raw).digest()
+  const sigPart = toBase64Url(sig)
+  return `${raw}.${sigPart}`
+}
+
+function verifyJwt(token: string): Record<string, unknown> | null {
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  const [headerPart, payloadPart, sigPart] = parts
+  const raw = `${headerPart}.${payloadPart}`
+  const expectedSig = toBase64Url(crypto.createHmac('sha256', jwtSecret()).update(raw).digest())
+  const a = Buffer.from(sigPart)
+  const b = Buffer.from(expectedSig)
+  if (a.length !== b.length) return null
+  if (!crypto.timingSafeEqual(a, b)) return null
+  try {
+    const payloadJson = Buffer.from(payloadPart.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')
+    const payload = JSON.parse(payloadJson) as Record<string, unknown>
+    const exp = Number(payload.exp || 0)
+    if (!Number.isFinite(exp) || exp <= Math.floor(Date.now() / 1000)) return null
+    return payload
+  } catch {
+    return null
+  }
+}
+
+function redisEmailKey(email: string) {
+  return `xhs:user:email:${normalizeEmail(email)}`
+}
+
+function redisUserIdKey(id: string) {
+  return `xhs:user:id:${id}`
+}
+
+async function findUserById(userId: string) {
+  if (hasUpstashRedis()) {
+    const raw = await redisCommand<string>('get', [redisUserIdKey(userId)])
+    if (!raw) return null
+    try {
+      return JSON.parse(raw) as UserRecord
+    } catch {
+      return null
+    }
+  }
+  await ensureUsersLoaded()
+  return users.find((u) => u.id === userId) || null
+}
+
 function cleanupExpired() {
   const t = nowMs()
   for (const [key, value] of verifyCodes.entries()) {
     if (value.expiresAt <= t) verifyCodes.delete(key)
-  }
-  for (const [token, value] of sessions.entries()) {
-    if (value.expiresAt <= t) sessions.delete(token)
   }
 }
 
@@ -116,11 +169,38 @@ export async function verifyCode(email: string, purpose: VerifyPurpose, code: st
 }
 
 export async function findUserByEmail(email: string) {
+  if (hasUpstashRedis()) {
+    const raw = await redisCommand<string>('get', [redisEmailKey(email)])
+    if (!raw) return null
+    try {
+      return JSON.parse(raw) as UserRecord
+    } catch {
+      return null
+    }
+  }
   await ensureUsersLoaded()
   return users.find((u) => u.email === normalizeEmail(email)) || null
 }
 
 export async function registerUser(email: string, password: string) {
+  if (hasUpstashRedis()) {
+    const normalized = normalizeEmail(email)
+    const existingRaw = await redisCommand<string>('get', [redisEmailKey(normalized)])
+    if (existingRaw) return null
+    const salt = crypto.randomBytes(16).toString('hex')
+    const passwordHash = hashPassword(password, salt)
+    const user: UserRecord = {
+      id: crypto.randomUUID(),
+      email: normalized,
+      passwordHash,
+      passwordSalt: salt,
+      createdAt: new Date().toISOString(),
+    }
+    const userJson = JSON.stringify(user)
+    await redisCommand('set', [redisEmailKey(normalized), userJson])
+    await redisCommand('set', [redisUserIdKey(user.id), userJson])
+    return user
+  }
   await ensureUsersLoaded()
   const normalized = normalizeEmail(email)
   if (users.some((u) => u.email === normalized)) return null
@@ -147,23 +227,27 @@ export function verifyPassword(user: UserRecord, password: string) {
 }
 
 export function createSession(userId: string) {
-  cleanupExpired()
-  const token = randomToken()
   const expiresAt = nowMs() + 7 * 24 * 60 * 60 * 1000
-  sessions.set(token, { token, userId, expiresAt })
+  const token = signJwt({
+    sub: userId,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(expiresAt / 1000),
+    jti: randomToken(),
+  })
   return { token, expiresAt }
 }
 
 export async function getUserByToken(token: string) {
-  await ensureUsersLoaded()
-  cleanupExpired()
-  const rec = sessions.get(token)
-  if (!rec) return null
-  return users.find((u) => u.id === rec.userId) || null
+  const payload = verifyJwt(token)
+  if (!payload) return null
+  const userId = String(payload.sub || '')
+  if (!userId) return null
+  return findUserById(userId)
 }
 
 export function revokeSession(token: string) {
-  sessions.delete(token)
+  // JWT is stateless, no server-side session entry to revoke.
+  void token
 }
 
 export async function sendCodeEmail(email: string, code: string) {

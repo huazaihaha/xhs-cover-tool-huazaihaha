@@ -9,12 +9,13 @@
    - `PLATO_API_KEY=你的柏拉图密钥`
    - `AUTH_EMAIL_FROM=你的发件邮箱（需在 Resend 验证）`
    - `AUTH_RESEND_API_KEY=你的 Resend API Key`
+   - `AUTH_JWT_SECRET=一个足够长的随机密钥`
+   - `UPSTASH_REDIS_REST_URL=你的 Upstash REST URL`
+   - `UPSTASH_REDIS_REST_TOKEN=你的 Upstash REST Token`
    - （可选兜底）`AUTH_SMTP_HOST/AUTH_SMTP_PORT/AUTH_SMTP_USER/AUTH_SMTP_PASS`
-   - `APP_DATA_DIR=/var/data/xhs-cover`（账号和额度数据存放目录）
-3. 在 Render 服务中挂载 Persistent Disk（持久化磁盘），建议挂载到 `/var/data`。
-4. 部署完成后拿到后端 URL，例如 `https://xxx.onrender.com`。
+   - （可选本地文件兜底）`APP_DATA_DIR=./api/data`
 3. 部署完成后拿到后端 URL，例如 `https://xxx.onrender.com`。
-> 如果不挂载持久化磁盘，发布/重启后账号与额度数据会被重置。
+> 若配置了 Upstash Redis，发布/重启后账号与额度数据不会被重置。
 
 ### 2. 前端部署（GitHub Pages）
 1. 在 GitHub 仓库 `Settings -> Pages` 中选择 `Source: GitHub Actions`。

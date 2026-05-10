@@ -24,5 +24,11 @@ services:
         value: /v1/images/tasks
       - key: PLATO_ASYNC
         value: "false"
+      - key: AUTH_JWT_SECRET
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false
       - key: APP_DATA_DIR
-        value: /var/data/xhs-cover
+        value: ./api/data

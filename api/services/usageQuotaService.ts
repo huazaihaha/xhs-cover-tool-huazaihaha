@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import { resolveAppDataDir } from './dataPath.js'
+import { hasUpstashRedis, redisCommand } from './upstashRedis.js'
 
 type UsageRecord = {
   userId: string
@@ -96,7 +97,32 @@ function getOrCreateBonusRecord(userId: string, month: string) {
   return rec
 }
 
+function usedQuotaKey(userId: string, month: string) {
+  return `xhs:quota:used:${userId}:${month}`
+}
+
+function bonusQuotaKey(userId: string, month: string) {
+  return `xhs:quota:bonus:${userId}:${month}`
+}
+
 export async function getMonthlyQuota(userId: string, now = new Date()): Promise<ConsumeQuotaResult> {
+  if (hasUpstashRedis()) {
+    const baseLimit = freeMonthlyLimit()
+    const month = currentMonthKey(now)
+    const usedRaw = await redisCommand<string>('get', [usedQuotaKey(userId, month)])
+    const bonusRaw = await redisCommand<string>('get', [bonusQuotaKey(userId, month)])
+    const used = Math.max(0, Number(usedRaw || 0))
+    const bonus = Math.max(0, Number(bonusRaw || 0))
+    const limit = baseLimit + bonus
+    return {
+      allowed: used < limit,
+      limit,
+      used,
+      remaining: Math.max(0, limit - used),
+      requested: 0,
+      month,
+    }
+  }
   await ensureLoaded()
   const baseLimit = freeMonthlyLimit()
   const month = currentMonthKey(now)
@@ -120,6 +146,37 @@ export async function consumeMonthlyQuota(
   requestedCount: number,
   now = new Date(),
 ): Promise<ConsumeQuotaResult> {
+  if (hasUpstashRedis()) {
+    const requested = Number.isFinite(requestedCount) ? Math.max(0, Math.floor(requestedCount)) : 0
+    const baseLimit = freeMonthlyLimit()
+    const month = currentMonthKey(now)
+    const usedRaw = await redisCommand<string>('get', [usedQuotaKey(userId, month)])
+    const bonusRaw = await redisCommand<string>('get', [bonusQuotaKey(userId, month)])
+    const used = Math.max(0, Number(usedRaw || 0))
+    const bonus = Math.max(0, Number(bonusRaw || 0))
+    const limit = baseLimit + bonus
+    const remaining = Math.max(0, limit - used)
+    if (requested < 1 || requested > remaining) {
+      return {
+        allowed: false,
+        limit,
+        used,
+        remaining,
+        requested,
+        month,
+      }
+    }
+    const nextUsed = await redisCommand<number>('incrby', [usedQuotaKey(userId, month), requested])
+    const usedAfter = Math.max(0, Number(nextUsed || used + requested))
+    return {
+      allowed: true,
+      limit,
+      used: usedAfter,
+      remaining: Math.max(0, limit - usedAfter),
+      requested,
+      month,
+    }
+  }
   await ensureLoaded()
   const requested = Number.isFinite(requestedCount) ? Math.max(0, Math.floor(requestedCount)) : 0
   const baseLimit = freeMonthlyLimit()
@@ -160,6 +217,13 @@ export async function grantMonthlyQuota(
   grantCount: number,
   now = new Date(),
 ): Promise<ConsumeQuotaResult> {
+  if (hasUpstashRedis()) {
+    const amount = Number.isFinite(grantCount) ? Math.max(0, Math.floor(grantCount)) : 0
+    if (amount < 1) return getMonthlyQuota(userId, now)
+    const month = currentMonthKey(now)
+    await redisCommand<number>('incrby', [bonusQuotaKey(userId, month), amount])
+    return getMonthlyQuota(userId, now)
+  }
   await ensureLoaded()
   const amount = Number.isFinite(grantCount) ? Math.max(0, Math.floor(grantCount)) : 0
   if (amount < 1) {
