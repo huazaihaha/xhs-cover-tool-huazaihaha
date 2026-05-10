@@ -24,4 +24,5 @@ services:
         value: /v1/images/tasks
       - key: PLATO_ASYNC
         value: "false"
-
+      - key: APP_DATA_DIR
+        value: /var/data/xhs-cover

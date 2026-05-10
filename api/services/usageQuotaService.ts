@@ -1,6 +1,6 @@
 import fs from 'fs/promises'
 import path from 'path'
-import { fileURLToPath } from 'url'
+import { resolveAppDataDir } from './dataPath.js'
 
 type UsageRecord = {
   userId: string
@@ -30,9 +30,7 @@ type ConsumeQuotaResult = {
   month: string
 }
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-const dataDir = path.resolve(__dirname, '../data')
+const dataDir = resolveAppDataDir()
 const usageFile = path.resolve(dataDir, 'usage.json')
 
 let loaded = false

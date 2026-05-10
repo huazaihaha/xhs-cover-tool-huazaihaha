@@ -1,7 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
-import { fileURLToPath } from 'url'
+import { resolveAppDataDir } from './dataPath.js'
 
 type VerifyPurpose = 'register' | 'login'
 
@@ -30,9 +30,7 @@ type UserFileShape = {
   users: UserRecord[]
 }
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-const dataDir = path.resolve(__dirname, '../data')
+const dataDir = resolveAppDataDir()
 const usersFile = path.resolve(dataDir, 'users.json')
 
 const sessions = new Map<string, SessionRecord>()
