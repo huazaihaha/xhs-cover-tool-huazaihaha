@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 import type { GenerateResultItem } from '../../shared/types'
-import { Check, Copy, ExternalLink, ImageOff, Loader2, RotateCcw } from 'lucide-react'
+import { Check, Copy, ExternalLink, ImageOff, ImagePlus, Loader2, RotateCcw } from 'lucide-react'
 
 type Item = GenerateResultItem & {
   proxyUrl?: string
@@ -12,6 +12,7 @@ type Props = {
   onToggle: (id: string) => void
   onOpen: (id: string) => void
   onPreview: (src: string, prompt: string) => void
+  onAddReference: (id: string) => void
   onCopyPrompt: (prompt: string) => void
   onRetry: (id: string) => void
 }
@@ -47,6 +48,7 @@ export default function ResultsGrid({
   onToggle,
   onOpen,
   onPreview,
+  onAddReference,
   onCopyPrompt,
   onRetry,
 }: Props) {
@@ -136,14 +138,24 @@ export default function ResultsGrid({
                       <RotateCcw className="h-4 w-4" />
                     </button>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => onOpen(it.id)}
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
-                      aria-label="编辑"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => onAddReference(it.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-cyan-200 transition hover:bg-cyan-400/10 hover:text-cyan-100"
+                        aria-label="添加为参考图"
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onOpen(it.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-xl text-zinc-300 transition hover:bg-white/5 hover:text-zinc-50"
+                        aria-label="编辑"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

@@ -206,6 +206,40 @@ export default function Home() {
     }
   }
 
+  const addResultAsReference = async (id: string) => {
+    const target = items.find((it) => it.id === id)
+    if (!target || target.status !== 'succeeded') return
+    if (referenceImages.length >= MAX_REFERENCE_IMAGES) {
+      setQuotaNotice(`参考图最多 ${MAX_REFERENCE_IMAGES} 张，请先移除后再添加`)
+      return
+    }
+    const src = target.proxyUrl || target.imageUrl
+    if (!src) return
+    try {
+      const resp = await fetch(src)
+      if (!resp.ok) throw new Error('加载图片失败')
+      const blob = await resp.blob()
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '')
+        reader.onerror = () => reject(new Error('读取图片失败'))
+        reader.readAsDataURL(blob)
+      })
+      if (!dataUrl) throw new Error('图片格式不支持')
+      setReferenceImages((prev) => [
+        ...prev,
+        {
+          id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          name: `结果图_${prev.length + 1}.png`,
+          dataUrl,
+        },
+      ])
+      setQuotaNotice('已添加为参考图，可继续生成')
+    } catch {
+      setQuotaNotice('添加参考图失败，请重试')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="pointer-events-none fixed inset-0 -z-10 bg-[radial-gradient(60rem_30rem_at_8%_-10%,rgba(16,185,129,0.15),transparent_60%),radial-gradient(50rem_26rem_at_92%_0%,rgba(59,130,246,0.13),transparent_60%)]" />
@@ -553,6 +587,7 @@ export default function Home() {
             onToggle={(id) => setSelected((s) => ({ ...s, [id]: !s[id] }))}
             onOpen={(id) => navigate(`/editor/${id}`)}
             onPreview={(src, prompt) => setPreviewImage({ src, prompt })}
+            onAddReference={addResultAsReference}
             onRetry={async (id) => {
               if (!requireAuth()) return
               if (busy) return
