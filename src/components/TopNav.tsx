@@ -27,7 +27,11 @@ export default function TopNav() {
     void authGetUsageQuota(token)
       .then((resp) => {
         if (cancelled) return
-        if (resp.ok && resp.quota) setQuota(resp.quota)
+        if (resp.ok && resp.quota) {
+          setQuota(resp.quota)
+          return
+        }
+        if (resp.status === 401) clearAuth()
       })
       .catch(() => {
         if (cancelled) return
@@ -35,7 +39,7 @@ export default function TopNav() {
     return () => {
       cancelled = true
     }
-  }, [token, setQuota])
+  }, [token, setQuota, clearAuth])
 
   return (
     <div className="sticky top-0 z-20 border-b border-white/10 bg-zinc-950/70 backdrop-blur">

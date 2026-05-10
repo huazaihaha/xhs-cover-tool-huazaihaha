@@ -53,6 +53,7 @@ export default function Home() {
   const token = useAuthStore((s) => s.token)
   const quota = useAuthStore((s) => s.quota)
   const setQuota = useAuthStore((s) => s.setQuota)
+  const clearAuth = useAuthStore((s) => s.clearAuth)
   const upsertItems = useGalleryStore((s) => s.upsertItems)
   const items = useGalleryStore((s) => s.workspaceItems)
   const busy = useGalleryStore((s) => s.workspaceBusy)
@@ -99,6 +100,11 @@ export default function Home() {
     if (token) return true
     navigate('/auth')
     return false
+  }
+  const handleAuthExpired = () => {
+    clearAuth()
+    setQuotaNotice('登录已失效，请重新登录')
+    navigate('/auth')
   }
   const openQuotaLimitModal = () => {
     setQuotaModalOpen(true)
@@ -156,6 +162,12 @@ export default function Home() {
         referenceImages: referenceImages.map((img) => img.dataUrl),
       }, undefined, token)
       if (!res.ok) {
+        if (res.errorCode === 'AUTH_REQUIRED' || res.status === 401) {
+          appendWorkspaceItems([target])
+          upsertItems([target])
+          handleAuthExpired()
+          return
+        }
         if (res.quota) setQuota(res.quota)
         if (res.errorCode === 'FREE_QUOTA_EXCEEDED' || res.errorCode === 'FREE_QUOTA_INSUFFICIENT') {
           openQuotaLimitModal()
@@ -338,6 +350,11 @@ export default function Home() {
                       referenceImages: referenceImages.map((img) => img.dataUrl),
                     }, controller.signal, token)
                     if (!res.ok) {
+                      if (res.errorCode === 'AUTH_REQUIRED' || res.status === 401) {
+                        replaceWorkspaceRun(runId, [])
+                        handleAuthExpired()
+                        return
+                      }
                       if (res.quota) setQuota(res.quota)
                       if (res.errorCode === 'FREE_QUOTA_EXCEEDED' || res.errorCode === 'FREE_QUOTA_INSUFFICIENT') {
                         replaceWorkspaceRun(runId, [])

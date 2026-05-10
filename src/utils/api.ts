@@ -121,7 +121,7 @@ export async function authGetUsageQuota(token: string) {
     },
   })
   const json = (await res.json()) as UsageQuotaResponse
-  return { ok: res.ok, ...json }
+  return { ok: res.ok, status: res.status, ...json }
 }
 
 export async function authGrantUsageQuota(
