@@ -34,8 +34,13 @@ function downloadBlob(blob: Blob, filename: string) {
   const a = document.createElement('a')
   a.href = url
   a.download = filename
+  a.style.display = 'none'
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+    a.remove()
+  }, 2000)
 }
 
 export default function Library() {
