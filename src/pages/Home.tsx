@@ -491,13 +491,22 @@ export default function Home() {
                     const zip = new JSZip()
                     const ts = new Date()
                     const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(ts.getHours()).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}`
-
-                    await Promise.all(
+                    const settled = await Promise.allSettled(
                       selectedSucceeded.map(async (it, idx) => {
-                        const url = it.proxyUrl || it.imageUrl
-                        if (!url) return
-                        const res = await fetch(url)
-                        const blob = await res.blob()
+                        const candidates = [it.proxyUrl, it.imageUrl].filter(Boolean) as string[]
+                        if (!candidates.length) throw new Error('Missing image url')
+                        let blob: Blob | null = null
+                        for (const url of candidates) {
+                          try {
+                            const res = await fetch(url)
+                            if (!res.ok) continue
+                            blob = await res.blob()
+                            if (blob.size > 0) break
+                          } catch {
+                            // try next candidate
+                          }
+                        }
+                        if (!blob) throw new Error('Download failed')
                         const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'bin'
                         const tags = it.namingTags as NamingTag | undefined
                         const filename = tags
@@ -506,9 +515,19 @@ export default function Home() {
                         zip.file(filename, blob)
                       }),
                     )
-
+                    const successCount = settled.filter((r) => r.status === 'fulfilled').length
+                    const failedCount = settled.length - successCount
+                    if (!successCount) {
+                      setQuotaNotice('批量下载失败，请稍后重试')
+                      return
+                    }
                     const zipped = await zip.generateAsync({ type: 'blob' })
                     downloadBlob(zipped, `covers_${stamp}.zip`)
+                    if (failedCount > 0) {
+                      setQuotaNotice(`已下载 ${successCount} 张，${failedCount} 张下载失败`)
+                    } else {
+                      setQuotaNotice('')
+                    }
                   }}
                 className={cn(
                   'inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition',

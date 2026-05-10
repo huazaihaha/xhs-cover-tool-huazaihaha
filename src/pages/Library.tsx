@@ -152,12 +152,22 @@ export default function Library() {
                 const zip = new JSZip()
                 const ts = new Date()
                 const stamp = `${ts.getFullYear()}${String(ts.getMonth() + 1).padStart(2, '0')}${String(ts.getDate()).padStart(2, '0')}_${String(ts.getHours()).padStart(2, '0')}${String(ts.getMinutes()).padStart(2, '0')}`
-                await Promise.all(
+                const settled = await Promise.allSettled(
                   selectedItems.map(async (it, idx) => {
-                    const url = it.editedUrl || it.proxyUrl || it.imageUrl
-                    if (!url) return
-                    const res = await fetch(url)
-                    const blob = await res.blob()
+                    const candidates = [it.editedUrl, it.proxyUrl, it.imageUrl].filter(Boolean) as string[]
+                    if (!candidates.length) throw new Error('Missing image url')
+                    let blob: Blob | null = null
+                    for (const url of candidates) {
+                      try {
+                        const res = await fetch(url)
+                        if (!res.ok) continue
+                        blob = await res.blob()
+                        if (blob.size > 0) break
+                      } catch {
+                        // try next candidate
+                      }
+                    }
+                    if (!blob) throw new Error('Download failed')
                     const ext = blob.type.includes('png') ? 'png' : blob.type.includes('jpeg') ? 'jpg' : 'bin'
                     const tags = it.namingTags as NamingTag | undefined
                     const filename = tags
@@ -166,6 +176,8 @@ export default function Library() {
                     zip.file(filename, blob)
                   }),
                 )
+                const successCount = settled.filter((r) => r.status === 'fulfilled').length
+                if (!successCount) return
 
                 const zipped = await zip.generateAsync({ type: 'blob' })
                 downloadBlob(zipped, `library_${stamp}.zip`)
