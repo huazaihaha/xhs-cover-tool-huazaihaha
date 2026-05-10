@@ -11,6 +11,13 @@ const items = [
   { to: '/settings', label: '设置', icon: Settings2 },
 ]
 
+const PUBLIC_BASE = import.meta.env.BASE_URL || '/'
+
+function withPublicBase(path: string) {
+  const normalizedPath = path.startsWith('/') ? path.slice(1) : path
+  return `${PUBLIC_BASE}${normalizedPath}`
+}
+
 export default function TopNav() {
   const location = useLocation()
   const token = useAuthStore((s) => s.token)
@@ -43,16 +50,13 @@ export default function TopNav() {
 
   return (
     <div className="sticky top-0 z-20 border-b border-white/10 bg-zinc-950/70 backdrop-blur">
-      <div className="flex w-full items-center justify-between px-6 py-4">
-        <div>
-          <div
-            className="text-3xl font-extrabold leading-none tracking-[0.04em] text-white"
-            style={{ fontFamily: '"Microsoft YaHei","PingFang SC","Noto Sans SC",sans-serif' }}
-          >
-            点赞AI -批量生图版
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="flex h-[108px] w-full items-center justify-between px-6">
+        <img
+          src={withPublicBase('/logo.png')}
+          alt="点赞AI"
+          className="h-[104px] w-auto object-contain"
+        />
+        <div className="flex items-center gap-3">
           {token && quota ? (
             <div className="rounded-full border border-emerald-300/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-100">
               本月剩余 {quota.remaining}/{quota.limit}
