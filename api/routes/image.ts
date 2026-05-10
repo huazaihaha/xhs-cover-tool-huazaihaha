@@ -56,28 +56,45 @@ router.get('/', async (req: Request, res: Response) => {
   }
 
   try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
-    const upstream = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        Accept: 'image/*,*/*;q=0.8',
-        'User-Agent': 'Mozilla/5.0 (compatible; CoverToolImageProxy/1.0)',
-      },
-      signal: controller.signal,
-    }).finally(() => {
-      clearTimeout(timeout)
-    })
-    if (!upstream.ok || !upstream.body) {
-      res.status(502).json({ success: false, error: 'Upstream error' })
-      return
+    const fetchOnce = async (acceptEncoding?: string) => {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30000)
+      try {
+        const upstream = await fetch(url.toString(), {
+          method: 'GET',
+          headers: {
+            Accept: 'image/*,*/*;q=0.8',
+            'User-Agent': 'Mozilla/5.0 (compatible; CoverToolImageProxy/1.0)',
+            ...(acceptEncoding ? { 'Accept-Encoding': acceptEncoding } : {}),
+          },
+          signal: controller.signal,
+        })
+        if (!upstream.ok || !upstream.body) {
+          throw new Error('UPSTREAM_BAD_RESPONSE')
+        }
+        const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
+        const arr = await upstream.arrayBuffer()
+        if (!arr.byteLength) {
+          throw new Error('EMPTY_IMAGE')
+        }
+        return { contentType, buffer: Buffer.from(arr) }
+      } finally {
+        clearTimeout(timeout)
+      }
     }
 
-    const contentType = upstream.headers.get('content-type') || 'application/octet-stream'
-    res.setHeader('Content-Type', contentType)
+    let result: { contentType: string; buffer: Buffer }
+    try {
+      // First try default encoding.
+      result = await fetchOnce()
+    } catch {
+      // Retry once with identity encoding to avoid some upstream stalls.
+      result = await fetchOnce('identity')
+    }
+
+    res.setHeader('Content-Type', result.contentType)
     res.setHeader('Cache-Control', 'no-store')
-    const arr = await upstream.arrayBuffer()
-    res.status(200).send(Buffer.from(arr))
+    res.status(200).send(result.buffer)
   } catch {
     res.status(502).json({ success: false, error: 'Upstream error' })
   }
