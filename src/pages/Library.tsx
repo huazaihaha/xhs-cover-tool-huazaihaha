@@ -43,6 +43,20 @@ function downloadBlob(blob: Blob, filename: string) {
   }, 2000)
 }
 
+async function fetchBlobWithTimeout(url: string, timeoutMs = 12000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(url, { signal: controller.signal })
+    if (!res.ok) throw new Error(`HTTP_${res.status}`)
+    const blob = await res.blob()
+    if (!blob.size) throw new Error('EMPTY_BLOB')
+    return blob
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 export default function Library() {
   const items = useGalleryStore((s) => s.items)
   const removeItems = useGalleryStore((s) => s.removeItems)
@@ -164,10 +178,9 @@ export default function Library() {
                     let blob: Blob | null = null
                     for (const url of candidates) {
                       try {
-                        const res = await fetch(url)
-                        if (!res.ok) continue
-                        blob = await res.blob()
-                        if (blob.size > 0) break
+                        blob = await fetchBlobWithTimeout(url)
+                        const isImageType = /^image\//.test(blob.type || '')
+                        if (isImageType || !blob.type) break
                       } catch {
                         // try next candidate
                       }
