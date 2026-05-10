@@ -11,6 +11,7 @@ type Props = {
   selected: Record<string, boolean>
   onToggle: (id: string) => void
   onOpen: (id: string) => void
+  onPreview: (src: string, prompt: string) => void
   onCopyPrompt: (prompt: string) => void
   onRetry: (id: string) => void
 }
@@ -45,6 +46,7 @@ export default function ResultsGrid({
   selected,
   onToggle,
   onOpen,
+  onPreview,
   onCopyPrompt,
   onRetry,
 }: Props) {
@@ -92,11 +94,18 @@ export default function ResultsGrid({
 
             <div className="aspect-[3/4] w-full bg-zinc-950">
               {src && it.status === 'succeeded' ? (
-                <img
-                  src={src}
-                  alt={it.prompt}
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
-                />
+                <button
+                  type="button"
+                  onClick={() => onPreview(src, it.prompt)}
+                  className="h-full w-full"
+                  aria-label="预览图片"
+                >
+                  <img
+                    src={src}
+                    alt={it.prompt}
+                    className="h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
+                  />
+                </button>
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-xs text-zinc-600">
                   {it.status === 'running' ? '生成中…' : '无图片'}

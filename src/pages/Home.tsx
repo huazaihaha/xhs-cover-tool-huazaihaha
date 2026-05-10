@@ -70,6 +70,7 @@ export default function Home() {
   const [quotaModalOpen, setQuotaModalOpen] = useState(false)
   const [quotaNotice, setQuotaNotice] = useState('')
   const [qrBroken, setQrBroken] = useState(false)
+  const [previewImage, setPreviewImage] = useState<{ src: string; prompt: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const activeRunRef = useRef<{ runId: string; controller: AbortController } | null>(null)
   const namingInFlightRef = useRef(false)
@@ -252,7 +253,8 @@ export default function Home() {
                     multiple
                     className="hidden"
                     onChange={async (e) => {
-                      const files = Array.from(e.target.files || [])
+                      const inputEl = e.currentTarget
+                      const files = Array.from(inputEl.files || [])
                       if (!files.length) return
 
                       const slots = Math.max(0, MAX_REFERENCE_IMAGES - referenceImages.length)
@@ -284,7 +286,7 @@ export default function Home() {
                         ),
                       )
                       setReferenceImages((prev) => [...prev, ...loaded.filter(Boolean) as ReferenceImage[]])
-                      e.currentTarget.value = ''
+                      inputEl.value = ''
                     }}
                   />
                 </div>
@@ -550,6 +552,7 @@ export default function Home() {
             selected={selected}
             onToggle={(id) => setSelected((s) => ({ ...s, [id]: !s[id] }))}
             onOpen={(id) => navigate(`/editor/${id}`)}
+            onPreview={(src, prompt) => setPreviewImage({ src, prompt })}
             onRetry={async (id) => {
               if (!requireAuth()) return
               if (busy) return
@@ -625,6 +628,27 @@ export default function Home() {
             >
               我知道了
             </button>
+          </div>
+        </div>
+      ) : null}
+
+      {previewImage ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="relative w-full max-w-4xl rounded-3xl border border-white/10 bg-zinc-950/95 p-4 shadow-2xl">
+            <button
+              type="button"
+              onClick={() => setPreviewImage(null)}
+              className="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-zinc-300 transition hover:bg-white/10 hover:text-zinc-50"
+              aria-label="关闭预览"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <img
+              src={previewImage.src}
+              alt={previewImage.prompt}
+              className="max-h-[78vh] w-full rounded-2xl object-contain"
+            />
+            <div className="mt-3 line-clamp-2 text-sm text-zinc-300">{previewImage.prompt}</div>
           </div>
         </div>
       ) : null}
