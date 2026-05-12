@@ -12,7 +12,7 @@ type GenerateSettingsState = {
 }
 
 const defaultState: Pick<GenerateSettingsState, 'size' | 'quality'> = {
-  size: '1024x1024',
+  size: '768x1024',
   quality: 'auto',
 }
 

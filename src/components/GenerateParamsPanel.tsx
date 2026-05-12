@@ -2,9 +2,11 @@ import { cn } from '@/lib/utils'
 import { useGenerateSettingsStore, type GenerateQuality } from '@/store/useGenerateSettingsStore'
 
 const sizeOptions: Array<{ value: string; label: string }> = [
-  { value: '1024x1024', label: '方形 1024' },
-  { value: '1024x1536', label: '竖版 1024×1536' },
-  { value: '1536x1024', label: '横版 1536×1024' },
+  { value: '768x1024', label: '3:4（默认）' },
+  { value: '1024x768', label: '4:3' },
+  { value: '720x1280', label: '9:16' },
+  { value: '1280x720', label: '16:9' },
+  { value: '1024x1024', label: '1:1' },
 ]
 
 const qualityOptions: Array<{ value: GenerateQuality; label: string }> = [
