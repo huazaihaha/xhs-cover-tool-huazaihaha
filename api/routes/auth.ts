@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express'
+import net from 'net'
 import {
   createSession,
   findUserByEmail,
@@ -16,14 +17,57 @@ function readBearerToken(req: Request) {
   return auth.slice(7).trim()
 }
 
+function normalizeIpCandidate(raw: string) {
+  const value = String(raw || '').trim().replace(/^for=/i, '').replace(/^"|"$/g, '')
+  if (!value) return ''
+  if (value === '::1') return '127.0.0.1'
+  if (value.startsWith('::ffff:')) {
+    const mapped = value.slice(7)
+    if (net.isIP(mapped)) return mapped
+  }
+  if (value.startsWith('[') && value.includes(']')) {
+    const inside = value.slice(1, value.indexOf(']')).trim()
+    if (net.isIP(inside)) return inside
+  }
+  if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(value)) {
+    const host = value.split(':')[0]
+    if (net.isIP(host)) return host
+  }
+  if (net.isIP(value)) return value
+  return ''
+}
+
 function readClientIp(req: Request) {
   const xForwardedFor = String(req.headers['x-forwarded-for'] || '').trim()
-  const fromHeader = xForwardedFor ? xForwardedFor.split(',')[0].trim() : ''
-  const raw = fromHeader || req.ip || req.socket.remoteAddress || ''
-  if (!raw) return ''
-  if (raw === '::1') return '127.0.0.1'
-  if (raw.startsWith('::ffff:')) return raw.slice(7)
-  return raw
+  const forwarded = String(req.headers.forwarded || '').trim()
+  const xRealIp = String(req.headers['x-real-ip'] || '').trim()
+  const cfConnectingIp = String(req.headers['cf-connecting-ip'] || '').trim()
+  const trueClientIp = String(req.headers['true-client-ip'] || '').trim()
+  const ips = Array.isArray(req.ips) ? req.ips : []
+  const forwardedFor = forwarded
+    .split(',')
+    .map((part) => {
+      const m = part.match(/for=([^;]+)/i)
+      return m?.[1] || ''
+    })
+    .filter(Boolean)
+
+  const candidates = [
+    cfConnectingIp,
+    trueClientIp,
+    xRealIp,
+    ...xForwardedFor.split(','),
+    ...forwardedFor,
+    ...ips,
+    req.ip,
+    req.socket.remoteAddress || '',
+  ]
+
+  for (const candidate of candidates) {
+    const normalized = normalizeIpCandidate(candidate)
+    if (normalized) return normalized
+  }
+  return ''
 }
 
 router.post('/register', async (req: Request, res: Response): Promise<void> => {

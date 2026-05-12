@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import path from 'path'
 import crypto from 'crypto'
+import net from 'net'
 import { resolveAppDataDir } from './dataPath.js'
 import { hasUpstashRedis, redisCommand } from './upstashRedis.js'
 
@@ -59,13 +60,25 @@ function normalizeEmail(email: string) {
 }
 
 function normalizeIp(ip: string) {
-  const raw = String(ip || '').trim()
+  const raw = String(ip || '').trim().replace(/^for=/i, '').replace(/^"|"$/g, '')
   if (!raw) return ''
   const first = raw.includes(',') ? raw.split(',')[0].trim() : raw
   if (!first) return ''
   if (first === '::1') return '127.0.0.1'
-  if (first.startsWith('::ffff:')) return first.slice(7)
-  return first
+  if (first.startsWith('::ffff:')) {
+    const mapped = first.slice(7)
+    if (net.isIP(mapped)) return mapped
+  }
+  if (first.startsWith('[') && first.includes(']')) {
+    const inside = first.slice(1, first.indexOf(']')).trim()
+    if (net.isIP(inside)) return inside
+  }
+  if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(first)) {
+    const host = first.split(':')[0]
+    if (net.isIP(host)) return host
+  }
+  if (net.isIP(first)) return first
+  return ''
 }
 
 function emailKey(email: string, purpose: VerifyPurpose) {
