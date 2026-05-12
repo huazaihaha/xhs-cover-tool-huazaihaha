@@ -17,9 +17,17 @@ type BonusRecord = {
   updatedAt: string
 }
 
+type DailyUsageRecord = {
+  userId: string
+  day: string
+  count: number
+  updatedAt: string
+}
+
 type UsageFileShape = {
   records: UsageRecord[]
   bonuses?: BonusRecord[]
+  dailyRecords?: DailyUsageRecord[]
 }
 
 type ConsumeQuotaResult = {
@@ -37,11 +45,19 @@ const usageFile = path.resolve(dataDir, 'usage.json')
 let loaded = false
 let records: UsageRecord[] = []
 let bonuses: BonusRecord[] = []
+let dailyRecords: DailyUsageRecord[] = []
 
 function currentMonthKey(now = new Date()) {
   const year = now.getFullYear()
   const month = String(now.getMonth() + 1).padStart(2, '0')
   return `${year}-${month}`
+}
+
+function currentDayKey(now = new Date()) {
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 function freeMonthlyLimit() {
@@ -57,16 +73,26 @@ async function ensureLoaded() {
     const parsed = JSON.parse(raw) as UsageFileShape
     records = Array.isArray(parsed?.records) ? parsed.records : []
     bonuses = Array.isArray(parsed?.bonuses) ? parsed.bonuses : []
+    dailyRecords = Array.isArray(parsed?.dailyRecords) ? parsed.dailyRecords : []
   } catch {
     records = []
     bonuses = []
-    await fs.writeFile(usageFile, JSON.stringify({ records: [], bonuses: [] }, null, 2), 'utf-8')
+    dailyRecords = []
+    await fs.writeFile(
+      usageFile,
+      JSON.stringify({ records: [], bonuses: [], dailyRecords: [] }, null, 2),
+      'utf-8',
+    )
   }
   loaded = true
 }
 
 async function saveRecords() {
-  await fs.writeFile(usageFile, JSON.stringify({ records, bonuses }, null, 2), 'utf-8')
+  await fs.writeFile(
+    usageFile,
+    JSON.stringify({ records, bonuses, dailyRecords }, null, 2),
+    'utf-8',
+  )
 }
 
 function getOrCreateRecord(userId: string, month: string) {
@@ -97,12 +123,34 @@ function getOrCreateBonusRecord(userId: string, month: string) {
   return rec
 }
 
+function getOrCreateDailyRecord(userId: string, day: string) {
+  let rec = dailyRecords.find((r) => r.userId === userId && r.day === day)
+  if (!rec) {
+    rec = {
+      userId,
+      day,
+      count: 0,
+      updatedAt: new Date().toISOString(),
+    }
+    dailyRecords.push(rec)
+  }
+  return rec
+}
+
 function usedQuotaKey(userId: string, month: string) {
   return `xhs:quota:used:${userId}:${month}`
 }
 
 function bonusQuotaKey(userId: string, month: string) {
   return `xhs:quota:bonus:${userId}:${month}`
+}
+
+function totalUsageKey(userId: string) {
+  return `xhs:usage:total:${userId}`
+}
+
+function dailyUsageKey(userId: string, day: string) {
+  return `xhs:usage:daily:${userId}:${day}`
 }
 
 export async function getMonthlyQuota(userId: string, now = new Date()): Promise<ConsumeQuotaResult> {
@@ -167,6 +215,9 @@ export async function consumeMonthlyQuota(
       }
     }
     const nextUsed = await redisCommand<number>('incrby', [usedQuotaKey(userId, month), requested])
+    const today = currentDayKey(now)
+    await redisCommand<number>('incrby', [totalUsageKey(userId), requested])
+    await redisCommand<number>('incrby', [dailyUsageKey(userId, today), requested])
     const usedAfter = Math.max(0, Number(nextUsed || used + requested))
     return {
       allowed: true,
@@ -181,8 +232,10 @@ export async function consumeMonthlyQuota(
   const requested = Number.isFinite(requestedCount) ? Math.max(0, Math.floor(requestedCount)) : 0
   const baseLimit = freeMonthlyLimit()
   const month = currentMonthKey(now)
+  const day = currentDayKey(now)
   const rec = getOrCreateRecord(userId, month)
   const bonusRec = getOrCreateBonusRecord(userId, month)
+  const dailyRec = getOrCreateDailyRecord(userId, day)
   const limit = baseLimit + Math.max(0, bonusRec.bonus)
   const used = rec.count
   const remaining = Math.max(0, limit - used)
@@ -200,6 +253,8 @@ export async function consumeMonthlyQuota(
 
   rec.count += requested
   rec.updatedAt = new Date().toISOString()
+  dailyRec.count += requested
+  dailyRec.updatedAt = new Date().toISOString()
   await saveRecords()
 
   return {
@@ -210,6 +265,48 @@ export async function consumeMonthlyQuota(
     requested,
     month,
   }
+}
+
+type AccountUsageStat = {
+  userId: string
+  totalGenerated: number
+  todayGenerated: number
+}
+
+export async function getAccountUsageStats(
+  userIds: string[],
+  now = new Date(),
+): Promise<AccountUsageStat[]> {
+  const normalizedIds = Array.from(new Set(userIds.map((v) => String(v || '').trim()).filter(Boolean)))
+  if (!normalizedIds.length) return []
+
+  if (hasUpstashRedis()) {
+    const day = currentDayKey(now)
+    const rows = await Promise.all(
+      normalizedIds.map(async (userId) => {
+        const totalRaw = await redisCommand<string>('get', [totalUsageKey(userId)])
+        const todayRaw = await redisCommand<string>('get', [dailyUsageKey(userId, day)])
+        return {
+          userId,
+          totalGenerated: Math.max(0, Number(totalRaw || 0)),
+          todayGenerated: Math.max(0, Number(todayRaw || 0)),
+        }
+      }),
+    )
+    return rows
+  }
+
+  await ensureLoaded()
+  const day = currentDayKey(now)
+  return normalizedIds.map((userId) => {
+    const totalGenerated = records
+      .filter((r) => r.userId === userId)
+      .reduce((acc, cur) => acc + Math.max(0, cur.count || 0), 0)
+    const todayGenerated = dailyRecords
+      .filter((r) => r.userId === userId && r.day === day)
+      .reduce((acc, cur) => acc + Math.max(0, cur.count || 0), 0)
+    return { userId, totalGenerated, todayGenerated }
+  })
 }
 
 export async function grantMonthlyQuota(

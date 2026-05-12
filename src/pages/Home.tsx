@@ -4,6 +4,7 @@ import TopNav from '@/components/TopNav'
 import PromptListEditor from '@/components/PromptListEditor'
 import PromptTemplateBuilder from '@/components/PromptTemplateBuilder'
 import ModelSelector from '@/components/ModelSelector'
+import GenerateParamsPanel from '@/components/GenerateParamsPanel'
 import ResultsGrid from '@/components/ResultsGrid'
 import { cn } from '@/lib/utils'
 import { generateImages, generateNaming } from '@/utils/api'
@@ -11,6 +12,7 @@ import { buildCoverFilename, buildCoverFilenameByTags } from '@/utils/filename'
 import type { GenerateResultItem, ModelName } from '../../shared/types'
 import { useGalleryStore } from '@/store/useGalleryStore'
 import { useAuthStore } from '@/store/useAuthStore'
+import { useGenerateSettingsStore } from '@/store/useGenerateSettingsStore'
 import { Download, Loader2, Sparkles, Square, Upload, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
@@ -59,6 +61,8 @@ export default function Home() {
   const quota = useAuthStore((s) => s.quota)
   const setQuota = useAuthStore((s) => s.setQuota)
   const clearAuth = useAuthStore((s) => s.clearAuth)
+  const size = useGenerateSettingsStore((s) => s.size)
+  const quality = useGenerateSettingsStore((s) => s.quality)
   const upsertItems = useGalleryStore((s) => s.upsertItems)
   const items = useGalleryStore((s) => s.workspaceItems)
   const busy = useGalleryStore((s) => s.workspaceBusy)
@@ -165,6 +169,8 @@ export default function Home() {
       const res = await generateImages({
         prompts: [target.prompt],
         model: target.model,
+        size,
+        quality,
         referenceImages: referenceImages.map((img) => img.dataUrl),
       }, undefined, token)
       if (!res.ok) {
@@ -261,6 +267,8 @@ export default function Home() {
           />
           <div className="h-px bg-white/10" />
           <ModelSelector value={model} onChange={setModel} />
+          <div className="h-px bg-white/10" />
+          <GenerateParamsPanel />
           <div className="h-px bg-white/10" />
           <div className="rounded-2xl bg-zinc-950/25 p-1">
                 <div className="mb-2 flex items-center justify-between">
@@ -388,6 +396,8 @@ export default function Home() {
                     const res = await generateImages({
                       prompts: normalized,
                       model,
+                      size,
+                      quality,
                       referenceImages: referenceImages.map((img) => img.dataUrl),
                     }, controller.signal, token)
                     if (!res.ok) {

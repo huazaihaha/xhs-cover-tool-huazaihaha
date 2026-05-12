@@ -57,8 +57,8 @@ async function requestJson(url: string, init: RequestInit) {
   return json
 }
 
-function pickFirstImage(payload: any): PlatoGenerateOutput {
-  const d = payload?.data?.[0]
+function pickFirstImage(payload: unknown): PlatoGenerateOutput {
+  const d = (payload as { data?: Array<{ url?: unknown; b64_json?: unknown }> })?.data?.[0]
   if (!d) return {}
   return {
     url: typeof d.url === 'string' ? d.url : undefined,

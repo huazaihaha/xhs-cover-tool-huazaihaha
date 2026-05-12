@@ -2,7 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import TopNav from '@/components/TopNav'
 import { useAuthStore } from '@/store/useAuthStore'
 import { useGalleryStore } from '@/store/useGalleryStore'
-import { authGetUsageQuota, authGrantUsageQuota } from '@/utils/api'
+import { authGetAccountUsageStats, authGetUsageQuota, authGrantUsageQuota } from '@/utils/api'
+
+const ACCOUNT_STATS_ADMIN = '1067363705@qq.com'
+
+type AccountUsageStat = {
+  userId: string
+  account: string
+  totalGenerated: number
+  todayGenerated: number
+}
 
 export default function Settings() {
   const user = useAuthStore((s) => s.user)
@@ -17,6 +26,10 @@ export default function Settings() {
   const [grantCount, setGrantCount] = useState('25')
   const [grantBusy, setGrantBusy] = useState(false)
   const [grantMessage, setGrantMessage] = useState('')
+  const [accountStats, setAccountStats] = useState<AccountUsageStat[]>([])
+  const [statsLoading, setStatsLoading] = useState(false)
+  const [statsError, setStatsError] = useState('')
+  const canViewAccountStats = (user?.email || '').toLowerCase() === ACCOUNT_STATS_ADMIN
 
   const generatedCount = useMemo(
     () => galleryItems.filter((i) => i.status === 'succeeded' || !!i.editedUrl).length,
@@ -52,6 +65,34 @@ export default function Settings() {
       cancelled = true
     }
   }, [token, setQuota])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!token || !canViewAccountStats) return
+    setStatsLoading(true)
+    setStatsError('')
+    void authGetAccountUsageStats(token)
+      .then((resp) => {
+        if (cancelled) return
+        if (!resp.ok) {
+          setStatsError(resp.error || '账号统计加载失败')
+          setAccountStats([])
+          return
+        }
+        setAccountStats(resp.items || [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setStatsError('账号统计加载失败，请稍后重试')
+      })
+      .finally(() => {
+        if (cancelled) return
+        setStatsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token, canViewAccountStats])
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
@@ -152,6 +193,48 @@ export default function Settings() {
               </button>
             </div>
             {grantMessage ? <div className="mt-3 text-xs text-zinc-200">{grantMessage}</div> : null}
+          </div>
+        ) : null}
+
+        {canViewAccountStats ? (
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-5">
+            <div className="text-base font-semibold text-emerald-200">账号生成数据统计</div>
+            <div className="mt-1 text-xs text-zinc-400">
+              统计字段：账号名称、累计生成图片数量、今日生成图片数量
+            </div>
+
+            {statsLoading ? <div className="mt-4 text-sm text-zinc-400">加载中...</div> : null}
+            {statsError ? <div className="mt-4 text-sm text-rose-300">{statsError}</div> : null}
+            {!statsLoading && !statsError ? (
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="text-zinc-400">
+                    <tr className="border-b border-white/10">
+                      <th className="px-3 py-2 font-medium">账号名称</th>
+                      <th className="px-3 py-2 font-medium">累计生成图片数量</th>
+                      <th className="px-3 py-2 font-medium">今日生成图片数量</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accountStats.length ? (
+                      accountStats.map((row) => (
+                        <tr key={row.userId} className="border-b border-white/5">
+                          <td className="px-3 py-2 text-zinc-100">{row.account}</td>
+                          <td className="px-3 py-2 text-emerald-200">{row.totalGenerated}</td>
+                          <td className="px-3 py-2 text-emerald-200">{row.todayGenerated}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td className="px-3 py-4 text-zinc-500" colSpan={3}>
+                          暂无统计数据
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>

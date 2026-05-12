@@ -25,6 +25,11 @@ type UserFileShape = {
   users: UserRecord[]
 }
 
+type BasicUser = {
+  id: string
+  email: string
+}
+
 const dataDir = resolveAppDataDir()
 const usersFile = path.resolve(dataDir, 'users.json')
 
@@ -123,6 +128,10 @@ function redisUserIdKey(id: string) {
   return `xhs:user:id:${id}`
 }
 
+function redisUserIdsKey() {
+  return 'xhs:user:ids'
+}
+
 async function findUserById(userId: string) {
   if (hasUpstashRedis()) {
     const raw = await redisCommand<string>('get', [redisUserIdKey(userId)])
@@ -173,7 +182,9 @@ export async function findUserByEmail(email: string) {
     const raw = await redisCommand<string>('get', [redisEmailKey(email)])
     if (!raw) return null
     try {
-      return JSON.parse(raw) as UserRecord
+      const user = JSON.parse(raw) as UserRecord
+      await redisCommand('sadd', [redisUserIdsKey(), user.id])
+      return user
     } catch {
       return null
     }
@@ -199,6 +210,7 @@ export async function registerUser(email: string, password: string) {
     const userJson = JSON.stringify(user)
     await redisCommand('set', [redisEmailKey(normalized), userJson])
     await redisCommand('set', [redisUserIdKey(user.id), userJson])
+    await redisCommand('sadd', [redisUserIdsKey(), user.id])
     return user
   }
   await ensureUsersLoaded()
@@ -243,6 +255,19 @@ export async function getUserByToken(token: string) {
   const userId = String(payload.sub || '')
   if (!userId) return null
   return findUserById(userId)
+}
+
+export async function listUsersBasic(): Promise<BasicUser[]> {
+  if (hasUpstashRedis()) {
+    const ids = (await redisCommand<string[]>('smembers', [redisUserIdsKey()])) || []
+    if (!ids.length) return []
+    const list = await Promise.all(ids.map((id) => findUserById(id)))
+    return list
+      .filter((u): u is UserRecord => !!u)
+      .map((u) => ({ id: u.id, email: u.email }))
+  }
+  await ensureUsersLoaded()
+  return users.map((u) => ({ id: u.id, email: u.email }))
 }
 
 export function revokeSession(token: string) {

@@ -132,7 +132,7 @@ router.post(
           month: quotaResult.month,
         },
       })
-    } catch (e) {
+    } catch {
       const message = 'Generation failed'
       const items = initialItems.map((item) => ({
         ...item,

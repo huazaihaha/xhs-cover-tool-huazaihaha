@@ -68,6 +68,17 @@ type GrantUsageQuotaResponse = {
   error?: string
 }
 
+type AccountUsageStatsResponse = {
+  success: boolean
+  items?: Array<{
+    userId: string
+    account: string
+    totalGenerated: number
+    todayGenerated: number
+  }>
+  error?: string
+}
+
 function authHeaders(token?: string) {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
@@ -138,4 +149,14 @@ export async function authGrantUsageQuota(
   })
   const json = (await res.json()) as GrantUsageQuotaResponse
   return { ok: res.ok, ...json }
+}
+
+export async function authGetAccountUsageStats(token: string) {
+  const res = await fetch(withApiBase('/api/usage/account-stats'), {
+    headers: {
+      ...authHeaders(token),
+    },
+  })
+  const json = (await res.json()) as AccountUsageStatsResponse
+  return { ok: res.ok, status: res.status, ...json }
 }
