@@ -88,7 +88,7 @@ router.post('/grant', async (req: Request, res: Response): Promise<void> => {
   })
 })
 
-router.get('/account-stats', async (req: Request, res: Response): Promise<void> => {
+async function handleAccountStats(req: Request, res: Response): Promise<void> {
   const token = readBearerToken(req)
   if (!token) {
     res.status(401).json({ success: false, error: '未登录' })
@@ -124,6 +124,11 @@ router.get('/account-stats', async (req: Request, res: Response): Promise<void> 
     success: true,
     items,
   })
-})
+}
+
+router.get('/account-stats', handleAccountStats)
+// Backward-compatible aliases to avoid route mismatch in different frontend builds.
+router.get('/accountStats', handleAccountStats)
+router.get('/stats/accounts', handleAccountStats)
 
 export default router

@@ -152,11 +152,28 @@ export async function authGrantUsageQuota(
 }
 
 export async function authGetAccountUsageStats(token: string) {
-  const res = await fetch(withApiBase('/api/usage/account-stats'), {
-    headers: {
-      ...authHeaders(token),
-    },
-  })
-  const json = (await res.json()) as AccountUsageStatsResponse
-  return { ok: res.ok, status: res.status, ...json }
+  const headers = {
+    ...authHeaders(token),
+  }
+  const paths = ['/api/usage/account-stats', '/api/usage/accountStats', '/api/usage/stats/accounts']
+  let lastResponse: { ok: boolean; status: number; json: AccountUsageStatsResponse } | null = null
+
+  for (const path of paths) {
+    const res = await fetch(withApiBase(path), { headers })
+    const json = (await res.json().catch(() => ({ success: false, error: '请求失败' }))) as AccountUsageStatsResponse
+    lastResponse = { ok: res.ok, status: res.status, json }
+    // If endpoint exists (even with 401/403), stop fallback attempts.
+    if (res.status !== 404) {
+      return { ok: res.ok, status: res.status, ...json }
+    }
+  }
+
+  if (!lastResponse) {
+    return { ok: false, status: 500, success: false, error: '请求失败' }
+  }
+  return {
+    ok: lastResponse.ok,
+    status: lastResponse.status,
+    ...lastResponse.json,
+  }
 }

@@ -23,12 +23,23 @@ type VerifyCodeRecord = {
 
 type UserFileShape = {
   users: UserRecord[]
+  ipBindings?: IpBindingRecord[]
 }
 
 type BasicUser = {
   id: string
   email: string
 }
+
+type IpBindingRecord = {
+  ip: string
+  userId: string
+  createdAt: string
+}
+
+type RegisterUserResult =
+  | { ok: true; user: UserRecord }
+  | { ok: false; reason: 'EMAIL_EXISTS' | 'IP_LIMITED' }
 
 const dataDir = resolveAppDataDir()
 const usersFile = path.resolve(dataDir, 'users.json')
@@ -37,6 +48,7 @@ const verifyCodes = new Map<string, VerifyCodeRecord>()
 
 let usersLoaded = false
 let users: UserRecord[] = []
+let ipBindings: IpBindingRecord[] = []
 
 function nowMs() {
   return Date.now()
@@ -44,6 +56,16 @@ function nowMs() {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
+}
+
+function normalizeIp(ip: string) {
+  const raw = String(ip || '').trim()
+  if (!raw) return ''
+  const first = raw.includes(',') ? raw.split(',')[0].trim() : raw
+  if (!first) return ''
+  if (first === '::1') return '127.0.0.1'
+  if (first.startsWith('::ffff:')) return first.slice(7)
+  return first
 }
 
 function emailKey(email: string, purpose: VerifyPurpose) {
@@ -61,15 +83,17 @@ async function ensureUsersLoaded() {
     const raw = await fs.readFile(usersFile, 'utf-8')
     const parsed = JSON.parse(raw) as UserFileShape
     users = Array.isArray(parsed?.users) ? parsed.users : []
+    ipBindings = Array.isArray(parsed?.ipBindings) ? parsed.ipBindings : []
   } catch {
     users = []
-    await fs.writeFile(usersFile, JSON.stringify({ users: [] }, null, 2), 'utf-8')
+    ipBindings = []
+    await fs.writeFile(usersFile, JSON.stringify({ users: [], ipBindings: [] }, null, 2), 'utf-8')
   }
   usersLoaded = true
 }
 
 async function saveUsers() {
-  await fs.writeFile(usersFile, JSON.stringify({ users }, null, 2), 'utf-8')
+  await fs.writeFile(usersFile, JSON.stringify({ users, ipBindings }, null, 2), 'utf-8')
 }
 
 function randomCode() {
@@ -130,6 +154,10 @@ function redisUserIdKey(id: string) {
 
 function redisUserIdsKey() {
   return 'xhs:user:ids'
+}
+
+function redisIpUserKey(ip: string) {
+  return `xhs:user:ip:${normalizeIp(ip)}`
 }
 
 async function findUserById(userId: string) {
@@ -193,11 +221,20 @@ export async function findUserByEmail(email: string) {
   return users.find((u) => u.email === normalizeEmail(email)) || null
 }
 
-export async function registerUser(email: string, password: string) {
+export async function registerUser(
+  email: string,
+  password: string,
+  clientIp = '',
+): Promise<RegisterUserResult> {
+  const normalizedIp = normalizeIp(clientIp)
   if (hasUpstashRedis()) {
     const normalized = normalizeEmail(email)
     const existingRaw = await redisCommand<string>('get', [redisEmailKey(normalized)])
-    if (existingRaw) return null
+    if (existingRaw) return { ok: false, reason: 'EMAIL_EXISTS' }
+    if (normalizedIp) {
+      const boundUserId = await redisCommand<string>('get', [redisIpUserKey(normalizedIp)])
+      if (boundUserId) return { ok: false, reason: 'IP_LIMITED' }
+    }
     const salt = crypto.randomBytes(16).toString('hex')
     const passwordHash = hashPassword(password, salt)
     const user: UserRecord = {
@@ -211,11 +248,23 @@ export async function registerUser(email: string, password: string) {
     await redisCommand('set', [redisEmailKey(normalized), userJson])
     await redisCommand('set', [redisUserIdKey(user.id), userJson])
     await redisCommand('sadd', [redisUserIdsKey(), user.id])
-    return user
+    if (normalizedIp) {
+      const bindResult = await redisCommand<string>('set', [redisIpUserKey(normalizedIp), user.id, 'NX'])
+      if (bindResult !== 'OK') {
+        await redisCommand('del', [redisEmailKey(normalized)])
+        await redisCommand('del', [redisUserIdKey(user.id)])
+        await redisCommand('srem', [redisUserIdsKey(), user.id])
+        return { ok: false, reason: 'IP_LIMITED' }
+      }
+    }
+    return { ok: true, user }
   }
   await ensureUsersLoaded()
   const normalized = normalizeEmail(email)
-  if (users.some((u) => u.email === normalized)) return null
+  if (users.some((u) => u.email === normalized)) return { ok: false, reason: 'EMAIL_EXISTS' }
+  if (normalizedIp && ipBindings.some((b) => b.ip === normalizedIp)) {
+    return { ok: false, reason: 'IP_LIMITED' }
+  }
   const salt = crypto.randomBytes(16).toString('hex')
   const passwordHash = hashPassword(password, salt)
   const user: UserRecord = {
@@ -226,8 +275,15 @@ export async function registerUser(email: string, password: string) {
     createdAt: new Date().toISOString(),
   }
   users.push(user)
+  if (normalizedIp) {
+    ipBindings.push({
+      ip: normalizedIp,
+      userId: user.id,
+      createdAt: new Date().toISOString(),
+    })
+  }
   await saveUsers()
-  return user
+  return { ok: true, user }
 }
 
 export function verifyPassword(user: UserRecord, password: string) {

@@ -16,6 +16,16 @@ function readBearerToken(req: Request) {
   return auth.slice(7).trim()
 }
 
+function readClientIp(req: Request) {
+  const xForwardedFor = String(req.headers['x-forwarded-for'] || '').trim()
+  const fromHeader = xForwardedFor ? xForwardedFor.split(',')[0].trim() : ''
+  const raw = fromHeader || req.ip || req.socket.remoteAddress || ''
+  if (!raw) return ''
+  if (raw === '::1') return '127.0.0.1'
+  if (raw.startsWith('::ffff:')) return raw.slice(7)
+  return raw
+}
+
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
   const email = String(req.body?.email || '').trim().toLowerCase()
   const password = String(req.body?.password || '')
@@ -25,17 +35,22 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     return
   }
 
-  const user = await registerUser(email, password)
-  if (!user) {
+  const clientIp = readClientIp(req)
+  const result = await registerUser(email, password, clientIp)
+  if (!result.ok) {
+    if ('reason' in result && result.reason === 'IP_LIMITED') {
+      res.status(429).json({ success: false, error: '同一IP仅允许注册一个账号' })
+      return
+    }
     res.status(400).json({ success: false, error: '邮箱已注册' })
     return
   }
 
-  const session = createSession(user.id)
+  const session = createSession(result.user.id)
   res.status(200).json({
     success: true,
     token: session.token,
-    user: { id: user.id, email: user.email },
+    user: { id: result.user.id, email: result.user.email },
   })
 })
 
