@@ -3,6 +3,8 @@ import type {
   GenerateResponse,
   NamingRequest,
   NamingResponse,
+  ArticleSlicerRequest,
+  ArticleSlicerResponse,
 } from '../../shared/types'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '')
@@ -40,6 +42,22 @@ export async function generateNaming(body: NamingRequest) {
     body: JSON.stringify(body),
   })
   const json = (await res.json()) as NamingResponse
+  return json
+}
+
+export async function generateArticleSlices(body: ArticleSlicerRequest): Promise<ArticleSlicerResponse> {
+  const requestBody = JSON.stringify(body)
+  console.log('[Slicer API] Request body:', requestBody)
+  
+  const res = await fetch(withApiBase('/api/slicer'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: requestBody,
+  })
+  
+  const json = (await res.json()) as ArticleSlicerResponse
+  console.log('[Slicer API] Raw response:', JSON.stringify(json, null, 2))
+  
   return json
 }
 

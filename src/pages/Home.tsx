@@ -72,6 +72,42 @@ export default function Home() {
   const setNamingTags = useGalleryStore((s) => s.setNamingTags)
 
   const [prompts, setPrompts] = useState<string[]>([''])
+
+  // Listen for newly imported prompts from ArticleToImages
+  useEffect(() => {
+    const checkAndImportPrompts = (promptsToImport: string[]) => {
+      if (Array.isArray(promptsToImport) && promptsToImport.length > 0) {
+        setPrompts(prev => {
+          // If the first input is empty, replace it. Otherwise append.
+          if (prev.length === 1 && !prev[0].trim()) {
+            return [...promptsToImport]
+          }
+          return [...prev, ...promptsToImport]
+        })
+      }
+    }
+
+    // 1. Check sessionStorage (handles cross-page navigation where Home wasn't mounted)
+    const pendingImports = sessionStorage.getItem('pending-import-prompts')
+    if (pendingImports) {
+      try {
+        checkAndImportPrompts(JSON.parse(pendingImports))
+      } catch (e) {
+        console.error('Failed to parse pending imports', e)
+      }
+      sessionStorage.removeItem('pending-import-prompts')
+    }
+
+    // 2. Listen to CustomEvent (handles case where Home is already mounted)
+    const handleImportPrompts = (e: CustomEvent<string[]>) => {
+      if (e.detail) checkAndImportPrompts(e.detail)
+    }
+    
+    window.addEventListener('import-prompts' as any, handleImportPrompts as any)
+    return () => {
+      window.removeEventListener('import-prompts' as any, handleImportPrompts as any)
+    }
+  }, [])
   const [model, setModel] = useState<ModelName>('image2')
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([])

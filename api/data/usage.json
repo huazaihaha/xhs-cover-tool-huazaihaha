@@ -1,0 +1,26 @@
+{
+  "records": [
+    {
+      "userId": "19c0a872-48e9-4ba3-bf71-f6e8fe06a5e5",
+      "month": "2026-05",
+      "count": 69,
+      "updatedAt": "2026-05-22T14:21:16.563Z"
+    }
+  ],
+  "bonuses": [
+    {
+      "userId": "19c0a872-48e9-4ba3-bf71-f6e8fe06a5e5",
+      "month": "2026-05",
+      "bonus": 1000,
+      "updatedAt": "2026-05-09T15:48:30.055Z"
+    }
+  ],
+  "dailyRecords": [
+    {
+      "userId": "19c0a872-48e9-4ba3-bf71-f6e8fe06a5e5",
+      "day": "2026-05-22",
+      "count": 8,
+      "updatedAt": "2026-05-22T14:21:16.563Z"
+    }
+  ]
+}

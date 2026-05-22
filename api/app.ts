@@ -13,6 +13,7 @@ import generateRoutes from './routes/generate.js'
 import imageRoutes from './routes/image.js'
 import namingRoutes from './routes/naming.js'
 import usageRoutes from './routes/usage.js'
+import slicerRoutes from './routes/slicer.js'
 
 // load env
 dotenv.config()
@@ -34,6 +35,7 @@ app.use('/api/generate', generateRoutes)
 app.use('/api/image', imageRoutes)
 app.use('/api/naming', namingRoutes)
 app.use('/api/usage', usageRoutes)
+app.use('/api/slicer', slicerRoutes)
 
 /**
  * health

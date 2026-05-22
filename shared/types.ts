@@ -52,3 +52,29 @@ export type NamingResultItem = {
 export type NamingResponse = {
   items: NamingResultItem[]
 }
+
+export type SlicerTemplate = {
+  id: string
+  name: string
+  description?: string
+  template: string
+}
+
+export type SlicePrompt = {
+  id: string
+  content: string
+  sourceSection?: string
+  index: number
+}
+
+export type ArticleSlicerRequest = {
+  content: string
+  template: string
+  count?: number
+}
+
+export type ArticleSlicerResponse = {
+  success: boolean
+  slices: SlicePrompt[]
+  error?: string
+}

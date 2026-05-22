@@ -5,6 +5,7 @@ import Editor from '@/pages/Editor'
 import Library from '@/pages/Library'
 import Settings from '@/pages/Settings'
 import AuthPage from '@/pages/Auth'
+import ArticleToImages from '@/pages/ArticleToImages'
 import { useAuthStore } from '@/store/useAuthStore'
 import { authMe } from '@/utils/api'
 
@@ -41,6 +42,7 @@ export default function App() {
       <Routes>
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/" element={<Home />} />
+        <Route path="/article-to-images" element={<ArticleToImages />} />
         <Route path="/editor/:id" element={<Protected><Editor /></Protected>} />
         <Route path="/library" element={<Protected><Library /></Protected>} />
         <Route path="/settings" element={<Protected><Settings /></Protected>} />
