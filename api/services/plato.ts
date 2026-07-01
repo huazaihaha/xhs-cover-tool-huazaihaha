@@ -1,4 +1,11 @@
 import pLimit from 'p-limit'
+import { Agent } from 'undici'
+
+const platoAgent = new Agent({
+  headersTimeout: Number(process.env.PLATO_REQUEST_TIMEOUT_MS) || 90_000,
+  bodyTimeout: Number(process.env.PLATO_REQUEST_TIMEOUT_MS) || 90_000,
+  connectTimeout: 15_000,
+})
 
 type PlatoAuthMode = 'x-api-key' | 'authorization' | 'both'
 
@@ -41,7 +48,7 @@ function getTasksPathPrefix() {
 
 async function requestJson(url: string, init: RequestInit) {
   console.log(`[plato] ${init.method || 'GET'} ${url}`)
-  const res = await fetch(url, init)
+  const res = await fetch(url, { ...init, dispatcher: platoAgent } as RequestInit)
   const text = await res.text()
   console.log(`[plato] response ${res.status} ${text.slice(0, 500)}`)
   const json = text ? JSON.parse(text) : null
@@ -103,7 +110,7 @@ async function pollTask(baseUrl: string, taskId: string) {
   throw new Error('Generation timeout')
 }
 
-export async function platoGenerateOne(
+async function platoGenerateOnceAttempt(
   options: PlatoGenerateOptions,
 ): Promise<PlatoGenerateOutput> {
   const baseUrl = getBaseUrl()
@@ -152,13 +159,49 @@ export async function platoGenerateOne(
   return pickFirstImage(payload)
 }
 
+const MAX_ATTEMPTS = 3
+
+export async function platoGenerateOne(
+  options: PlatoGenerateOptions,
+): Promise<PlatoGenerateOutput> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await platoGenerateOnceAttempt(options)
+    } catch (err) {
+      lastError = err
+      console.error(
+        `[plato] attempt ${attempt}/${MAX_ATTEMPTS} failed for prompt "${options.prompt.slice(0, 30)}...":`,
+        err instanceof Error ? err.message : err,
+      )
+      if (attempt < MAX_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 1000 * attempt))
+      }
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error('Generation failed')
+}
+
+export type PlatoGenerateSettled = { output?: PlatoGenerateOutput; errorMessage?: string }
+
 export async function platoGenerateMany(
   items: PlatoGenerateOptions[],
   concurrency = 10,
-) {
+  onItemSettled?: (index: number, result: PlatoGenerateSettled) => void,
+): Promise<PlatoGenerateSettled[]> {
   const limit = pLimit(concurrency)
-  const results = await Promise.all(
-    items.map((item) => limit(() => platoGenerateOne(item))),
+  return Promise.all(
+    items.map((item, idx) =>
+      limit(async (): Promise<PlatoGenerateSettled> => {
+        let settled: PlatoGenerateSettled
+        try {
+          settled = { output: await platoGenerateOne(item) }
+        } catch (err) {
+          settled = { errorMessage: err instanceof Error ? err.message : 'Generation failed' }
+        }
+        onItemSettled?.(idx, settled)
+        return settled
+      }),
+    ),
   )
-  return results
 }

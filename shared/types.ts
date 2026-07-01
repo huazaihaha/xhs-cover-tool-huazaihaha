@@ -32,6 +32,14 @@ export type GenerateResponse = {
   }
 }
 
+export type GenerateQuota = NonNullable<GenerateResponse['quota']>
+
+export type GenerateStreamEvent =
+  | { type: 'quota'; quota: GenerateQuota }
+  | { type: 'item'; idx: number; item: GenerateResultItem }
+  | { type: 'done' }
+  | { type: 'error'; message: string }
+
 export type NamingRequestItem = {
   id: string
   prompt: string

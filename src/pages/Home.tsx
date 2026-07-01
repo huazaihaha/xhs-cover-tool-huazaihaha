@@ -428,6 +428,7 @@ export default function Home() {
                   }))
                   appendWorkspaceItems(running)
 
+                  const resolvedIds = new Set<string>()
                   try {
                     const res = await generateImages({
                       prompts: normalized,
@@ -435,7 +436,18 @@ export default function Home() {
                       size,
                       quality,
                       referenceImages: referenceImages.map((img) => img.dataUrl),
-                    }, controller.signal, token)
+                    }, controller.signal, token, (idx, rawItem) => {
+                      const placeholder = running[idx]
+                      const merged: Item = {
+                        ...rawItem,
+                        id: placeholder?.id ?? rawItem.id,
+                        proxyUrl: toProxyUrl(rawItem.imageUrl),
+                      }
+                      resolvedIds.add(merged.id)
+                      appendWorkspaceItems([merged])
+                      upsertItems([merged])
+                      if (merged.status === 'succeeded') void ensureNamingReady([merged])
+                    })
                     if (!res.ok) {
                       if (res.errorCode === 'AUTH_REQUIRED' || res.status === 401) {
                         replaceWorkspaceRun(runId, [])
@@ -456,13 +468,6 @@ export default function Home() {
                         `本次已消耗 ${normalized.length} 次额度，当前剩余 ${res.quota.remaining}/${res.quota.limit}`,
                       )
                     }
-                    const next: Item[] = res.items.map((it) => ({
-                      ...it,
-                      proxyUrl: toProxyUrl(it.imageUrl),
-                    }))
-                    replaceWorkspaceRun(runId, next)
-                    upsertItems(next)
-                    void ensureNamingReady(next)
                   } catch (err) {
                     const stopped = controller.signal.aborted
                     const message = err instanceof Error ? err.message : 'Generation failed'
@@ -471,16 +476,17 @@ export default function Home() {
                       openQuotaLimitModal()
                       return
                     }
-                    const failed: Item[] = normalized.map((prompt, idx) => ({
-                      id: `${runId}_${idx}`,
-                      prompt,
-                      model,
-                      status: 'failed',
-                      errorMessage: stopped ? 'Stopped' : message,
-                      createdAt: new Date().toISOString(),
-                    }))
-                    replaceWorkspaceRun(runId, failed)
-                    upsertItems(failed)
+                    const failed: Item[] = running
+                      .filter((r) => !resolvedIds.has(r.id))
+                      .map((r) => ({
+                        ...r,
+                        status: 'failed',
+                        errorMessage: stopped ? 'Stopped' : message,
+                      }))
+                    if (failed.length) {
+                      appendWorkspaceItems(failed)
+                      upsertItems(failed)
+                    }
                   } finally {
                     if (activeRunRef.current?.runId === runId) activeRunRef.current = null
                     setWorkspaceBusy(false)

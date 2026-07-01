@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express'
 import { nanoid } from 'nanoid'
-import type { GenerateRequest, GenerateResponse, ModelName } from '../../shared/types.js'
+import type { GenerateRequest, GenerateResultItem, GenerateStreamEvent, ModelName } from '../../shared/types.js'
 import { platoGenerateMany } from '../services/plato.js'
 import { putBase64Image } from '../services/imageStore.js'
 import { consumeMonthlyQuota, getMonthlyQuota } from '../services/usageQuotaService.js'
@@ -21,7 +21,7 @@ function modelToProvider(model: ModelName) {
 
 router.post(
   '/',
-  async (req: Request, res: Response<GenerateResponse>): Promise<void> => {
+  async (req: Request, res: Response): Promise<void> => {
     const token = readBearerToken(req)
     const user = token ? await getUserByToken(token) : null
     if (!user) {
@@ -91,8 +91,27 @@ router.post(
       createdAt,
     }))
 
+    res.status(200)
+    res.setHeader('Content-Type', 'application/x-ndjson')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('X-Accel-Buffering', 'no')
+
+    const writeEvent = (event: GenerateStreamEvent) => {
+      res.write(`${JSON.stringify(event)}\n`)
+    }
+
+    writeEvent({
+      type: 'quota',
+      quota: {
+        limit: quotaResult.limit,
+        used: quotaResult.used,
+        remaining: quotaResult.remaining,
+        month: quotaResult.month,
+      },
+    })
+
     try {
-      const outputs = await platoGenerateMany(
+      await platoGenerateMany(
         normalizedPrompts.map((prompt) => ({
           prompt,
           model: providerModel,
@@ -101,54 +120,26 @@ router.post(
           images: referenceImages.length ? referenceImages : undefined,
         })),
         10,
-      )
-
-      const items = initialItems.map((item, idx) => {
-        const out = outputs[idx]
-        if (out?.url) {
-          return { ...item, status: 'succeeded' as const, imageUrl: out.url }
-        }
-        if (out?.b64_json) {
-          const imageId = putBase64Image(out.b64_json)
-          return {
-            ...item,
-            status: 'succeeded' as const,
-            imageUrl: `/api/image/b64/${imageId}`,
+        (idx, settled) => {
+          const base = initialItems[idx]
+          let item: GenerateResultItem
+          if (settled.output?.url) {
+            item = { ...base, status: 'succeeded', imageUrl: settled.output.url }
+          } else if (settled.output?.b64_json) {
+            const imageId = putBase64Image(settled.output.b64_json)
+            item = { ...base, status: 'succeeded', imageUrl: `/api/image/b64/${imageId}` }
+          } else {
+            item = { ...base, status: 'failed', errorMessage: settled.errorMessage || 'Empty response' }
           }
-        }
-        return {
-          ...item,
-          status: 'failed' as const,
-          errorMessage: 'Empty response',
-        }
-      })
-
-      res.status(200).json({
-        items,
-        quota: {
-          limit: quotaResult.limit,
-          used: quotaResult.used,
-          remaining: quotaResult.remaining,
-          month: quotaResult.month,
+          writeEvent({ type: 'item', idx, item })
         },
-      })
+      )
     } catch (err) {
       console.error('[generate] platoGenerateMany failed:', err)
-      const message = 'Generation failed'
-      const items = initialItems.map((item) => ({
-        ...item,
-        status: 'failed' as const,
-        errorMessage: message,
-      }))
-      res.status(200).json({
-        items,
-        quota: {
-          limit: quotaResult.limit,
-          used: quotaResult.used,
-          remaining: quotaResult.remaining,
-          month: quotaResult.month,
-        },
-      })
+      writeEvent({ type: 'error', message: 'Generation failed' })
+    } finally {
+      writeEvent({ type: 'done' })
+      res.end()
     }
   },
 )

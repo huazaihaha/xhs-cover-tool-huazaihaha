@@ -1,6 +1,8 @@
 import type {
   GenerateRequest,
   GenerateResponse,
+  GenerateResultItem,
+  GenerateStreamEvent,
   NamingRequest,
   NamingResponse,
   ArticleSlicerRequest,
@@ -14,7 +16,12 @@ function withApiBase(path: string) {
   return `${API_BASE_URL}${path}`
 }
 
-export async function generateImages(body: GenerateRequest, signal?: AbortSignal, token?: string) {
+export async function generateImages(
+  body: GenerateRequest,
+  signal?: AbortSignal,
+  token?: string,
+  onItem?: (idx: number, item: GenerateResultItem) => void,
+) {
   const res = await fetch(withApiBase('/api/generate'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...authHeaders(token) },
@@ -22,12 +29,48 @@ export async function generateImages(body: GenerateRequest, signal?: AbortSignal
     signal,
   })
 
-  const json = (await res.json().catch(() => ({ items: [] }))) as GenerateResponse
-  return {
-    ok: res.ok,
-    status: res.status,
-    ...json,
+  if (!res.ok || !res.body) {
+    const json = (await res.json().catch(() => ({ items: [] }))) as GenerateResponse
+    return { ok: res.ok, status: res.status, ...json }
   }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const items: GenerateResultItem[] = []
+  let quota: GenerateResponse['quota']
+  let errorMessage: string | undefined
+
+  const consumeLine = (line: string) => {
+    if (!line.trim()) return
+    const event = JSON.parse(line) as GenerateStreamEvent
+    if (event.type === 'quota') {
+      quota = event.quota
+    } else if (event.type === 'item') {
+      items[event.idx] = event.item
+      onItem?.(event.idx, event.item)
+    } else if (event.type === 'error') {
+      errorMessage = event.message
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    let newlineIdx: number
+    while ((newlineIdx = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, newlineIdx)
+      buffer = buffer.slice(newlineIdx + 1)
+      consumeLine(line)
+    }
+  }
+  if (buffer.trim()) consumeLine(buffer)
+
+  if (errorMessage) {
+    return { ok: false, status: res.status, items, message: errorMessage, quota }
+  }
+  return { ok: true, status: res.status, items, quota }
 }
 
 export async function checkHealth() {
