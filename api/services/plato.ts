@@ -40,8 +40,10 @@ function getTasksPathPrefix() {
 }
 
 async function requestJson(url: string, init: RequestInit) {
+  console.log(`[plato] ${init.method || 'GET'} ${url}`)
   const res = await fetch(url, init)
   const text = await res.text()
+  console.log(`[plato] response ${res.status} ${text.slice(0, 500)}`)
   const json = text ? JSON.parse(text) : null
   if (!res.ok) {
     const message =

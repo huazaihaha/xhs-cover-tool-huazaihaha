@@ -132,7 +132,8 @@ router.post(
           month: quotaResult.month,
         },
       })
-    } catch {
+    } catch (err) {
+      console.error('[generate] platoGenerateMany failed:', err)
       const message = 'Generation failed'
       const items = initialItems.map((item) => ({
         ...item,
