@@ -17,15 +17,17 @@ services:
       - key: PLATO_AUTH_MODE
         value: x-api-key
       - key: PLATO_MODEL_IMAGE2
-        value: gpt-image-2-all
+        value: gpt-image-2
       - key: PLATO_GENERATIONS_PATH
         value: /v1/images/generations
       - key: PLATO_TASKS_PATH_PREFIX
         value: /v1/images/tasks
       - key: PLATO_ASYNC
         value: "false"
+      - key: PLATO_MODEL_NAMING
+        value: gemini-3.1-flash-lite-preview
       - key: PLATO_MODEL_SLICER
-        value: gemini-3-pro-preview
+        value: gemini-3.1-pro-preview
       - key: AUTH_JWT_SECRET
         sync: false
       - key: UPSTASH_REDIS_REST_URL
