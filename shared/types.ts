@@ -6,6 +6,7 @@ export type GenerateRequest = {
   size?: string
   quality?: 'low' | 'medium' | 'high' | 'auto'
   referenceImages?: string[]
+  promptReferenceImages?: string[][]
 }
 
 export type GenerateTaskStatus = 'queued' | 'running' | 'succeeded' | 'failed'

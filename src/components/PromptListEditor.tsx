@@ -1,17 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { CheckSquare, ChevronDown, CopyPlus, Plus, Sparkles, Square, Trash2 } from 'lucide-react'
+import { CheckSquare, ChevronDown, CopyPlus, Plus, Sparkles, Square, Trash2, Upload, X } from 'lucide-react'
+
+export type PromptRow = { text: string; images: string[] }
 
 type Props = {
-  prompts: string[]
-  onChange: (prompts: string[]) => void
+  rows: PromptRow[]
+  onChange: (rows: PromptRow[]) => void
   onOpenTemplateBuilder: () => void
+  refMode: 'unified' | 'perPrompt'
 }
 
-export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuilder }: Props) {
+const MAX_IMAGES_PER_PROMPT = 4
+const MAX_IMAGE_SIZE = 4 * 1024 * 1024
+
+export default function PromptListEditor({ rows, onChange, onOpenTemplateBuilder, refMode }: Props) {
   const textareaRefs = useRef<Record<number, HTMLTextAreaElement | null>>({})
   const [selected, setSelected] = useState<Record<number, boolean>>({})
   const [expanded, setExpanded] = useState(false)
+  const rowFileInputRef = useRef<HTMLInputElement | null>(null)
+  const activeRowRef = useRef<number | null>(null)
 
   const resize = (idx: number) => {
     const el = textareaRefs.current[idx]
@@ -21,29 +29,86 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
   }
 
   useEffect(() => {
-    prompts.forEach((_, idx) => resize(idx))
+    rows.forEach((_, idx) => resize(idx))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prompts.length])
+  }, [rows.length])
 
   useEffect(() => {
     setSelected((prev) => {
       const next: Record<number, boolean> = {}
-      for (let i = 0; i < prompts.length; i += 1) {
+      for (let i = 0; i < rows.length; i += 1) {
         if (prev[i]) next[i] = true
       }
       return next
     })
-  }, [prompts.length])
+  }, [rows.length])
 
   const selectedCount = useMemo(
-    () => prompts.reduce((acc, _, idx) => (selected[idx] ? acc + 1 : acc), 0),
-    [prompts, selected],
+    () => rows.reduce((acc, _, idx) => (selected[idx] ? acc + 1 : acc), 0),
+    [rows, selected],
   )
-  const visiblePrompts = expanded ? prompts : prompts.slice(0, 5)
-  const hiddenCount = Math.max(0, prompts.length - 5)
+  const visibleRows = expanded ? rows : rows.slice(0, 5)
+  const hiddenCount = Math.max(0, rows.length - 5)
+
+  const updateRowText = (idx: number, text: string) => {
+    const next = [...rows]
+    next[idx] = { ...next[idx], text }
+    onChange(next)
+  }
+
+  const removeRowImage = (idx: number, imgIdx: number) => {
+    const next = [...rows]
+    next[idx] = { ...next[idx], images: next[idx].images.filter((_, i) => i !== imgIdx) }
+    onChange(next)
+  }
+
+  const openRowUpload = (idx: number) => {
+    activeRowRef.current = idx
+    rowFileInputRef.current?.click()
+  }
+
+  const handleRowFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputEl = e.currentTarget
+    const idx = activeRowRef.current
+    const files = Array.from(inputEl.files || [])
+    inputEl.value = ''
+    if (idx === null || !files.length) return
+
+    const currentImages = rows[idx]?.images || []
+    const slots = Math.max(0, MAX_IMAGES_PER_PROMPT - currentImages.length)
+    const selectedFiles = files.slice(0, slots)
+    const loaded = await Promise.all(
+      selectedFiles.map(
+        (file) =>
+          new Promise<string | null>((resolve) => {
+            if (file.size > MAX_IMAGE_SIZE) {
+              resolve(null)
+              return
+            }
+            const reader = new FileReader()
+            reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null)
+            reader.onerror = () => resolve(null)
+            reader.readAsDataURL(file)
+          }),
+      ),
+    )
+    const dataUrls = loaded.filter(Boolean) as string[]
+    if (!dataUrls.length) return
+    const next = [...rows]
+    next[idx] = { ...next[idx], images: [...currentImages, ...dataUrls] }
+    onChange(next)
+  }
 
   return (
     <div className="space-y-3">
+      <input
+        ref={rowFileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleRowFileChange}
+      />
       <button
         type="button"
         onClick={onOpenTemplateBuilder}
@@ -59,7 +124,7 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
         </div>
         <button
           type="button"
-          onClick={() => onChange([...prompts, ''])}
+          onClick={() => onChange([...rows, { text: '', images: [] }])}
           className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-white/15"
         >
           <Plus className="h-4 w-4" />
@@ -70,17 +135,17 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
         <button
           type="button"
           onClick={() => {
-            if (selectedCount === prompts.length) {
+            if (selectedCount === rows.length) {
               setSelected({})
               return
             }
             const next: Record<number, boolean> = {}
-            for (let i = 0; i < prompts.length; i += 1) next[i] = true
+            for (let i = 0; i < rows.length; i += 1) next[i] = true
             setSelected(next)
           }}
           className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2.5 py-1 text-[11px] text-zinc-100 transition hover:bg-white/10 hover:text-zinc-50"
         >
-          {selectedCount === prompts.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+          {selectedCount === rows.length ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
           全选
         </button>
         <button
@@ -88,8 +153,8 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
           disabled={!selectedCount}
           onClick={() => {
             if (!selectedCount) return
-            const next = prompts.filter((_, idx) => !selected[idx])
-            onChange(next.length ? next : [''])
+            const next = rows.filter((_, idx) => !selected[idx])
+            onChange(next.length ? next : [{ text: '', images: [] }])
             setSelected({})
           }}
           className={cn(
@@ -105,7 +170,7 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
       </div>
 
       <div className="grid gap-2">
-        {visiblePrompts.map((value, idx) => (
+        {visibleRows.map((row, idx) => (
           <div
             key={idx}
             className="group relative rounded-xl border border-white/10 bg-zinc-950/40 p-2"
@@ -134,11 +199,9 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
                   el.style.height = `${el.scrollHeight}px`
                 }
               }}
-              value={value}
+              value={row.text}
               onChange={(e) => {
-                const next = [...prompts]
-                next[idx] = e.target.value
-                onChange(next)
+                updateRowText(idx, e.target.value)
                 e.currentTarget.style.height = 'auto'
                 e.currentTarget.style.height = `${e.currentTarget.scrollHeight}px`
               }}
@@ -151,11 +214,9 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
               <button
                 type="button"
                 onClick={() => {
-                  const prev = idx > 0 ? prompts[idx - 1] : ''
+                  const prev = idx > 0 ? rows[idx - 1].text : ''
                   if (!prev) return
-                  const next = [...prompts]
-                  next[idx] = prev
-                  onChange(next)
+                  updateRowText(idx, prev)
                 }}
                 className={cn(
                   'inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-100 transition',
@@ -169,8 +230,8 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
               <button
                 type="button"
                 onClick={() => {
-                  const next = prompts.filter((_, i) => i !== idx)
-                  onChange(next.length ? next : [''])
+                  const next = rows.filter((_, i) => i !== idx)
+                  onChange(next.length ? next : [{ text: '', images: [] }])
                 }}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-zinc-100 transition hover:bg-white/5 hover:text-zinc-50"
                 aria-label="删除"
@@ -178,6 +239,36 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
+            {refMode === 'perPrompt' ? (
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 border-t border-white/10 px-1 pt-2">
+                {row.images.map((src, imgIdx) => (
+                  <div key={imgIdx} className="group/thumb relative h-7 w-7 overflow-hidden rounded-md border border-white/10">
+                    <img src={src} alt="" className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeRowImage(idx, imgIdx)}
+                      className="absolute inset-0 flex items-center justify-center bg-black/60 text-zinc-100 opacity-0 transition group-hover/thumb:opacity-100"
+                      aria-label="移除该条参考图"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+                {row.images.length < MAX_IMAGES_PER_PROMPT ? (
+                  <button
+                    type="button"
+                    onClick={() => openRowUpload(idx)}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-dashed border-white/20 text-zinc-400 transition hover:border-white/40 hover:text-zinc-100"
+                    aria-label="为该条添加参考图"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                  </button>
+                ) : null}
+                {row.images.length === 0 ? (
+                  <span className="text-[11px] text-zinc-500">未设置参考图</span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ))}
       </div>
@@ -194,10 +285,10 @@ export default function PromptListEditor({ prompts, onChange, onOpenTemplateBuil
       ) : null}
 
       <div className="mt-3 flex items-center justify-between text-xs text-zinc-100">
-        <div>已输入 {prompts.filter((p) => p.trim()).length} 条</div>
+        <div>已输入 {rows.filter((r) => r.text.trim()).length} 条</div>
         <button
           type="button"
-          onClick={() => onChange([''])}
+          onClick={() => onChange([{ text: '', images: [] }])}
           className="rounded-full px-3 py-1.5 text-xs text-zinc-100 transition hover:bg-white/5 hover:text-zinc-50"
         >
           清空

@@ -35,12 +35,17 @@ router.post(
 
     const body = req.body as GenerateRequest
     const prompts = Array.isArray(body?.prompts) ? body.prompts : []
-    const referenceImages = Array.isArray(body?.referenceImages)
-      ? body.referenceImages
-          .filter((i): i is string => typeof i === 'string')
-          .map((i) => i.trim())
-          .filter(Boolean)
-          .slice(0, 4)
+    const sanitizeImages = (list: unknown): string[] =>
+      Array.isArray(list)
+        ? list
+            .filter((i): i is string => typeof i === 'string')
+            .map((i) => i.trim())
+            .filter(Boolean)
+            .slice(0, 4)
+        : []
+    const referenceImages = sanitizeImages(body?.referenceImages)
+    const rawPromptReferenceImages = Array.isArray(body?.promptReferenceImages)
+      ? body.promptReferenceImages
       : []
     const model = body?.model
 
@@ -53,14 +58,19 @@ router.post(
       return
     }
 
-    const normalizedPrompts = prompts
-      .map((p) => (typeof p === 'string' ? p.trim() : ''))
-      .filter(Boolean)
+    const combined = prompts
+      .map((p, idx) => ({
+        prompt: typeof p === 'string' ? p.trim() : '',
+        images: sanitizeImages(rawPromptReferenceImages[idx]),
+      }))
+      .filter((item) => item.prompt)
 
-    if (normalizedPrompts.length < 1) {
+    if (combined.length < 1) {
       res.status(400).json({ items: [] })
       return
     }
+
+    const normalizedPrompts = combined.map((item) => item.prompt)
 
     const quotaResult = await consumeMonthlyQuota(user.id, normalizedPrompts.length)
     if (!quotaResult.allowed) {
@@ -112,12 +122,16 @@ router.post(
 
     try {
       await platoGenerateMany(
-        normalizedPrompts.map((prompt) => ({
-          prompt,
+        combined.map((item) => ({
+          prompt: item.prompt,
           model: providerModel,
           size: body.size,
           quality: body.quality,
-          images: referenceImages.length ? referenceImages : undefined,
+          images: item.images.length
+            ? item.images
+            : referenceImages.length
+              ? referenceImages
+              : undefined,
         })),
         10,
         (idx, settled) => {

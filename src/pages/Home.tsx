@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import JSZip from 'jszip'
 import TopNav from '@/components/TopNav'
-import PromptListEditor from '@/components/PromptListEditor'
+import PromptListEditor, { type PromptRow } from '@/components/PromptListEditor'
 import PromptTemplateBuilder from '@/components/PromptTemplateBuilder'
 import ModelSelector from '@/components/ModelSelector'
 import GenerateParamsPanel from '@/components/GenerateParamsPanel'
@@ -16,7 +16,7 @@ import { useGenerateSettingsStore } from '@/store/useGenerateSettingsStore'
 import { Download, Loader2, Sparkles, Square, Upload, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
-type Item = GenerateResultItem & { proxyUrl?: string; namingTags?: NamingTag }
+type Item = GenerateResultItem & { proxyUrl?: string; namingTags?: NamingTag; refImages?: string[] }
 type ReferenceImage = { id: string; name: string; dataUrl: string }
 type NamingTag = { industry?: string; style?: string; color?: string }
 
@@ -71,18 +71,20 @@ export default function Home() {
   const setWorkspaceBusy = useGalleryStore((s) => s.setWorkspaceBusy)
   const setNamingTags = useGalleryStore((s) => s.setNamingTags)
 
-  const [prompts, setPrompts] = useState<string[]>([''])
+  const [promptRows, setPromptRows] = useState<PromptRow[]>([{ text: '', images: [] }])
+  const prompts = useMemo(() => promptRows.map((r) => r.text), [promptRows])
 
   // Listen for newly imported prompts from ArticleToImages
   useEffect(() => {
     const checkAndImportPrompts = (promptsToImport: string[]) => {
       if (Array.isArray(promptsToImport) && promptsToImport.length > 0) {
-        setPrompts(prev => {
+        setPromptRows(prev => {
           // If the first input is empty, replace it. Otherwise append.
-          if (prev.length === 1 && !prev[0].trim()) {
-            return [...promptsToImport]
+          const imported = promptsToImport.map((text) => ({ text, images: [] as string[] }))
+          if (prev.length === 1 && !prev[0].text.trim()) {
+            return imported
           }
-          return [...prev, ...promptsToImport]
+          return [...prev, ...imported]
         })
       }
     }
@@ -111,6 +113,7 @@ export default function Home() {
   const [model, setModel] = useState<ModelName>('image2')
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [referenceImages, setReferenceImages] = useState<ReferenceImage[]>([])
+  const [refMode, setRefMode] = useState<'unified' | 'perPrompt'>('unified')
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
   const [quotaModalOpen, setQuotaModalOpen] = useState(false)
   const [quotaNotice, setQuotaNotice] = useState('')
@@ -207,7 +210,7 @@ export default function Home() {
         model: target.model,
         size,
         quality,
-        referenceImages: referenceImages.map((img) => img.dataUrl),
+        referenceImages: target.refImages ?? referenceImages.map((img) => img.dataUrl),
       }, undefined, token)
       if (!res.ok) {
         if (res.errorCode === 'AUTH_REQUIRED' || res.status === 401) {
@@ -297,9 +300,10 @@ export default function Home() {
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           <PromptListEditor
-            prompts={prompts}
-            onChange={setPrompts}
+            rows={promptRows}
+            onChange={setPromptRows}
             onOpenTemplateBuilder={() => setTemplateModalOpen(true)}
+            refMode={refMode}
           />
           <div className="h-px bg-white/10" />
           <ModelSelector value={model} onChange={setModel} />
@@ -307,91 +311,119 @@ export default function Home() {
           <GenerateParamsPanel />
           <div className="h-px bg-white/10" />
           <div className="rounded-2xl bg-zinc-950/25 p-1">
-                <div className="mb-2 flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-emerald-200">参考图</div>
-                    <div className="text-[11px] text-zinc-100">最多 10 张，单张建议不超过 4MB</div>
-                  </div>
+                <div className="mb-2 flex rounded-xl bg-white/5 p-1">
                   <button
                     type="button"
-                    onClick={() => {
-                      if (!requireAuth()) return
-                      fileInputRef.current?.click()
-                    }}
+                    onClick={() => setRefMode('unified')}
                     className={cn(
-                      'inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs transition',
-                      referenceImages.length < MAX_REFERENCE_IMAGES
-                        ? 'bg-white/10 text-zinc-100 hover:bg-white/15 hover:text-zinc-50'
-                        : 'cursor-not-allowed bg-white/5 text-zinc-600',
+                      'flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                      refMode === 'unified' ? 'bg-emerald-300 text-zinc-950' : 'text-zinc-300 hover:text-zinc-50',
                     )}
-                    disabled={referenceImages.length >= MAX_REFERENCE_IMAGES}
                   >
-                    <Upload className="h-4 w-4" />
-                    上传
+                    统一参考图
                   </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    className="hidden"
-                    onChange={async (e) => {
-                      const inputEl = e.currentTarget
-                      const files = Array.from(inputEl.files || [])
-                      if (!files.length) return
-
-                      const slots = Math.max(0, MAX_REFERENCE_IMAGES - referenceImages.length)
-                      const selectedFiles = files.slice(0, slots)
-                      const loaded = await Promise.all(
-                        selectedFiles.map(
-                          (file) =>
-                            new Promise<ReferenceImage | null>((resolve) => {
-                              if (file.size > 4 * 1024 * 1024) {
-                                resolve(null)
-                                return
-                              }
-                              const reader = new FileReader()
-                              reader.onload = () => {
-                                const dataUrl = typeof reader.result === 'string' ? reader.result : ''
-                                if (!dataUrl) {
-                                  resolve(null)
-                                  return
-                                }
-                                resolve({
-                                  id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                                  name: file.name,
-                                  dataUrl,
-                                })
-                              }
-                              reader.onerror = () => resolve(null)
-                              reader.readAsDataURL(file)
-                            }),
-                        ),
-                      )
-                      setReferenceImages((prev) => [...prev, ...loaded.filter(Boolean) as ReferenceImage[]])
-                      inputEl.value = ''
-                    }}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setRefMode('perPrompt')}
+                    className={cn(
+                      'flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition',
+                      refMode === 'perPrompt' ? 'bg-emerald-300 text-zinc-950' : 'text-zinc-300 hover:text-zinc-50',
+                    )}
+                  >
+                    逐条设置参考图
+                  </button>
                 </div>
 
-                {referenceImages.length ? (
-                  <div className="grid grid-cols-5 gap-2">
-                    {referenceImages.map((img) => (
-                      <div key={img.id} className="group relative overflow-hidden rounded-xl border border-white/10">
-                        <img src={img.dataUrl} alt={img.name} className="aspect-square w-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => setReferenceImages((prev) => prev.filter((x) => x.id !== img.id))}
-                          className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-zinc-200 transition hover:bg-black/80 hover:text-zinc-50"
-                          aria-label="移除参考图"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
+                {refMode === 'unified' ? (
+                  <>
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="text-[11px] text-zinc-100">最多 10 张，单张建议不超过 4MB，所有提示词共用</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!requireAuth()) return
+                          fileInputRef.current?.click()
+                        }}
+                        className={cn(
+                          'inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs transition',
+                          referenceImages.length < MAX_REFERENCE_IMAGES
+                            ? 'bg-white/10 text-zinc-100 hover:bg-white/15 hover:text-zinc-50'
+                            : 'cursor-not-allowed bg-white/5 text-zinc-600',
+                        )}
+                        disabled={referenceImages.length >= MAX_REFERENCE_IMAGES}
+                      >
+                        <Upload className="h-4 w-4" />
+                        上传
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={async (e) => {
+                          const inputEl = e.currentTarget
+                          const files = Array.from(inputEl.files || [])
+                          if (!files.length) return
+
+                          const slots = Math.max(0, MAX_REFERENCE_IMAGES - referenceImages.length)
+                          const selectedFiles = files.slice(0, slots)
+                          const loaded = await Promise.all(
+                            selectedFiles.map(
+                              (file) =>
+                                new Promise<ReferenceImage | null>((resolve) => {
+                                  if (file.size > 4 * 1024 * 1024) {
+                                    resolve(null)
+                                    return
+                                  }
+                                  const reader = new FileReader()
+                                  reader.onload = () => {
+                                    const dataUrl = typeof reader.result === 'string' ? reader.result : ''
+                                    if (!dataUrl) {
+                                      resolve(null)
+                                      return
+                                    }
+                                    resolve({
+                                      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                                      name: file.name,
+                                      dataUrl,
+                                    })
+                                  }
+                                  reader.onerror = () => resolve(null)
+                                  reader.readAsDataURL(file)
+                                }),
+                            ),
+                          )
+                          setReferenceImages((prev) => [...prev, ...loaded.filter(Boolean) as ReferenceImage[]])
+                          inputEl.value = ''
+                        }}
+                      />
+                    </div>
+
+                    {referenceImages.length ? (
+                      <div className="grid grid-cols-5 gap-2">
+                        {referenceImages.map((img) => (
+                          <div key={img.id} className="group relative overflow-hidden rounded-xl border border-white/10">
+                            <img src={img.dataUrl} alt={img.name} className="aspect-square w-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => setReferenceImages((prev) => prev.filter((x) => x.id !== img.id))}
+                              className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-zinc-200 transition hover:bg-black/80 hover:text-zinc-50"
+                              aria-label="移除参考图"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    ) : (
+                      <div className="text-[11px] text-zinc-100">未上传参考图</div>
+                    )}
+                  </>
                 ) : (
-                  <div className="text-[11px] text-zinc-100">未上传参考图</div>
+                  <div className="text-[11px] text-zinc-100">
+                    请在左侧每条提示词下方分别上传参考图（每条最多 4 张）
+                  </div>
                 )}
               </div>
 
@@ -402,10 +434,11 @@ export default function Home() {
                 disabled={!canGenerate}
                 onClick={async () => {
                   if (!requireAuth()) return
-                  const normalized = prompts
-                    .map((p) => p.trim())
-                    .filter(Boolean)
-                  if (!normalized.length) return
+                  const normalizedRows = promptRows
+                    .map((r) => ({ text: r.text.trim(), images: r.images }))
+                    .filter((r) => r.text)
+                  if (!normalizedRows.length) return
+                  const normalized = normalizedRows.map((r) => r.text)
                   if (quota && quota.remaining < normalized.length) {
                     openQuotaLimitModal()
                     return
@@ -419,12 +452,13 @@ export default function Home() {
                   setSelected({})
                   setQuotaNotice('')
 
-                  const running: Item[] = normalized.map((prompt, idx) => ({
+                  const running: Item[] = normalizedRows.map((row, idx) => ({
                     id: `${runId}_${idx}`,
-                    prompt,
+                    prompt: row.text,
                     model,
                     status: 'running',
                     createdAt: new Date().toISOString(),
+                    refImages: refMode === 'perPrompt' ? row.images : referenceImages.map((img) => img.dataUrl),
                   }))
                   appendWorkspaceItems(running)
 
@@ -435,13 +469,15 @@ export default function Home() {
                       model,
                       size,
                       quality,
-                      referenceImages: referenceImages.map((img) => img.dataUrl),
+                      referenceImages: refMode === 'unified' ? referenceImages.map((img) => img.dataUrl) : undefined,
+                      promptReferenceImages: refMode === 'perPrompt' ? normalizedRows.map((r) => r.images) : undefined,
                     }, controller.signal, token, (idx, rawItem) => {
                       const placeholder = running[idx]
                       const merged: Item = {
                         ...rawItem,
                         id: placeholder?.id ?? rawItem.id,
                         proxyUrl: toProxyUrl(rawItem.imageUrl),
+                        refImages: placeholder?.refImages,
                       }
                       resolvedIds.add(merged.id)
                       appendWorkspaceItems([merged])
@@ -702,7 +738,10 @@ export default function Home() {
               </button>
             <PromptTemplateBuilder
               onGenerate={(generatedPrompts) => {
-                setPrompts((prev) => [...prev, ...generatedPrompts])
+                setPromptRows((prev) => [
+                  ...prev,
+                  ...generatedPrompts.map((text) => ({ text, images: [] as string[] })),
+                ])
                 setTemplateModalOpen(false)
               }}
             />
